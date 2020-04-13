@@ -1,2 +1,2 @@
 # lda_parallelization
-LDA Parallelization
+A parallel implementation of Latent Dirichlet Allocation.
