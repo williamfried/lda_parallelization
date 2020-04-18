@@ -3,17 +3,19 @@ import numpy as np
 
 class LDA:
 
-    def __init__(self, num_topics, alpha, beta, max_iter=10):
+    def __init__(self, num_topics, alpha, beta, max_iter=10, random_state=205):
         self.num_topics = num_topics
         self.alpha = alpha
         self.beta = beta
         self.beta_sum = np.sum(beta)
         self.max_iter = max_iter
-        self.topic2word2cnt = None
+        self.topic2cnt = None
         self.word2topic2cnt = None
         self.doc2topic2cnt = None
         self.num_docs = None
         self.doc2word_idx2topic = None
+
+        np.random.seed(random_state)
 
     def calculate_mass(self, n_doc, n_word, n_all, topic_idx, word):
         return (n_doc + self.alpha[topic_idx]) * (n_word + self.beta[word]) / (n_all + self.beta_sum)
@@ -26,7 +28,7 @@ class LDA:
         self.num_docs = len(documents)
 
         # number of words assigned to topic z across all documents
-        self.topic2word2cnt = {i: 0 for i in range(self.num_topics)}
+        self.topic2cnt = {i: 0 for i in range(self.num_topics)}
 
         # number of times word w is assigned to topic z across all documents
         self.word2topic2cnt = {}
@@ -48,7 +50,7 @@ class LDA:
 
                 # update counts needed for updates
                 self.doc2topic2cnt[doc_idx][random_topic] += 1
-                self.topic2word2cnt[random_topic] += 1
+                self.topic2cnt[random_topic] += 1
                 if word not in self.word2topic2cnt:
                     self.word2topic2cnt[word] = {i: 0 for i in range(self.num_topics)}
                 self.word2topic2cnt[word][random_topic] += 1
@@ -62,13 +64,13 @@ class LDA:
                     # decrement counts
                     previous_topic = self.doc2word_idx2topic[doc_idx][word_idx]
                     self.doc2topic2cnt[doc_idx][previous_topic] -= 1
-                    self.topic2word2cnt[previous_topic] -= 1
+                    self.topic2cnt[previous_topic] -= 1
                     self.word2topic2cnt[word][previous_topic] -= 1
 
                     # assign word to new topic
                     topic_masses = np.array([self.calculate_mass(self.doc2topic2cnt[doc_idx],
                                                                  self.word2topic2cnt[word][topic_idx],
-                                                                 self.topic2word2cnt[topic_idx], topic_idx, word)
+                                                                 self.topic2cnt[topic_idx], topic_idx, word)
                                              for topic_idx in range(self.num_topics)])
                     topic_masses_norm = topic_masses / np.sum(topic_masses)
 
@@ -76,13 +78,9 @@ class LDA:
 
                     # update counts needed for updates
                     self.doc2topic2cnt[doc_idx][new_topic] += 1
-                    self.topic2word2cnt[new_topic] += 1
+                    self.topic2cnt[new_topic] += 1
                     self.word2topic2cnt[word][new_topic] += 1
 
-
-            # determine if algorithm has converged
-            if self.compute_perplexity():
-                break
             iter_num += 1
 
     def get_topic_distributions(self):
@@ -91,7 +89,7 @@ class LDA:
         for topic_idx in range(self.num_topics):
             for word_idx in range(vocab_size):
                 matrix[topic_idx, word_idx] = ((self.word2topic2cnt[word_idx][topic_idx] + self.beta[word_idx]) /
-                                               (self.topic2word2cnt[topic_idx]) + vocab_size * self.beta[word_idx])
+                                               (self.topic2cnt[topic_idx]) + vocab_size * self.beta[word_idx])
 
         return matrix
 
@@ -105,12 +103,3 @@ class LDA:
                                               (topic_assigned_num + self.num_topics * self.alpha[topic_idx]))
 
         return matrix
-
-
-
-
-
-
-
-
-
