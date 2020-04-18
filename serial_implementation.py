@@ -3,7 +3,7 @@ import numpy as np
 
 class LDA:
 
-    def __init__(self, num_topics, alpha=None, beta=None, max_iter=10, random_state=205):
+    def __init__(self, num_topics, alpha=None, beta=None, max_iter=20, random_state=205):
         self.num_topics = num_topics
         self.alpha = alpha if alpha else 1 / num_topics
         self.beta = beta if beta else 1 / num_topics
@@ -96,7 +96,7 @@ class LDA:
                                                  for topic_idx in range(self.num_topics)])
                         topic_masses_norm = topic_masses / np.sum(topic_masses)
 
-                        new_topic = np.random.choice(self.num_topics, 1, p=topic_masses_norm)
+                        new_topic = np.random.choice(self.num_topics, 1, p=topic_masses_norm)[0]
 
                         # increment counts
                         self.doc2word2topic2cnt[doc_id][word][new_topic] += 1

@@ -32,6 +32,7 @@ def preprocess(document):
     words = [word for word in txt.split() if word not in stop_words and not any(char.isdigit() for char in word)]
     return words
 
+
 # get a count of each preprocessed word for each document
 documents_counts = (sc.textFile('ap.txt')
                     .map(lambda x: x.lstrip())
