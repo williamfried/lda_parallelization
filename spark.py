@@ -1,4 +1,5 @@
 from collections import Counter
+import json
 import nltk
 from nltk.corpus import stopwords
 from pyspark import SparkConf, SparkContext
@@ -31,13 +32,14 @@ def preprocess(document):
     words = [word for word in txt.split() if word not in stop_words and not any(char.isdigit() for char in word)]
     return words
 
-
+# get a count of each preprocessed word for each document
 documents_counts = (sc.textFile('ap.txt')
                     .map(lambda x: x.lstrip())
                     .filter(lambda x: not x.startswith('<') and len(x.split()) > min_doc_length)
                     .map(preprocess)
                     .map(lambda x: Counter(x).most_common()))
 
+# cache RDD to avoid having to perform pipeline above multiple times
 documents_counts.cache()
 
 # get words that occur at least 'min_word_occurrences' times throughout all documents and occur in at least
@@ -46,17 +48,24 @@ words_in_vocab = (documents_counts.flatMap(lambda doc: [(key, (value, 1)) for ke
                   .reduceByKey(lambda x, y: (x[0] + y[0], x[1] + y[1]))
                   .filter(lambda x: x[1][0] >= min_word_occurrences and x[1][1] >= min_document_occurrences))
 
+# map each word to an arbitrary integer between 0 and vocab_size - 1
 word2num = {word: i for i, (word, _) in enumerate(words_in_vocab.collect())}
 
+# filter out words that aren't in the vocabulary and convert words that are in the vocabulary to the corresponding
+# integers
 document_counts_numerical = documents_counts.map(lambda doc_counts: {word2num[word]: cnt for word, cnt in doc_counts
                                                                      if word in word2num})
 
+# map each document (represented by an integer between 0 and document_number - 1) to a dictionary that maps each word
+# to the number of times it appears in the given document
 doc_id2counts = {i: count_dict for i, count_dict in enumerate(document_counts_numerical.collect())}
 
-# num2word = {v: k for k, v in word2num.items()}
-# a = doc_id2counts[2240]
-# print({num2word[num]: cnt for num, cnt in a.items()})
+# two objects we need from here:
+# 1. word2num to reverse the dictionary and recover the words corresponding to each integer after LDA is performed
+# 2. doc_id2counts
 
+with open('word2num.txt', 'w') as f:
+    f.write(json.dumps(word2num))
 
-
-
+with open('doc_id2counts.txt', 'w') as f:
+    f.write(json.dumps(doc_id2counts))
