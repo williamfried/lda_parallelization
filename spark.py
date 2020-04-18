@@ -12,6 +12,9 @@ except LookupError:
 finally:
     stop_words = set(stopwords.words('english'))
 
+domain_specific_stop_words = {'said'}
+stop_words |= domain_specific_stop_words
+
 
 conf = SparkConf().setMaster('local[1]').setAppName('logs')
 sc = SparkContext(conf=conf)

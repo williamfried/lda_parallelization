@@ -52,6 +52,7 @@ class LDA:
                     self.word2topic2cnt[word] = {i: 0 for i in range(self.num_topics)}
 
                 # get random topics
+
                 random_topics = np.random.choice(self.num_topics, word_cnt)
 
                 for random_topic in random_topics:
