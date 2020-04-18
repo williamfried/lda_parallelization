@@ -21,12 +21,15 @@ class LDA:
         np.random.seed(random_state)
 
     def calculate_mass(self, n_doc, n_word, n_all):
+        '''Compute the unnormalized mass associated with a specific topic given the relevant count information.'''
         return (n_doc + self.alpha) * (n_word + self.beta) / (n_all + self.beta_sum)
 
     def compute_perplexity(self):
+        '''Calculate perplexity score after each iteration to determine if the algorithm has converged. '''
         pass
 
     def fit(self, doc2word2cnt):
+        '''Perform LDA inference algorithm as described in paper.'''
 
         self.num_docs = len(doc2word2cnt)
 
@@ -108,6 +111,8 @@ class LDA:
             iter_num += 1
 
     def get_topic_distributions(self):
+        '''Calculate word distribution for each topic using methodology described here:
+        https://stats.stackexchange.com/questions/346329/in-lda-after-collapsed-gibbs-sampling-how-to-estimate-values-of-other-latent-v'''
         matrix = np.zeros((self.num_topics, self.vocab_size))
         for topic in range(self.num_topics):
             for word in range(self.vocab_size):
@@ -117,6 +122,7 @@ class LDA:
         return matrix
 
     def get_document_distributions(self):
+        '''Calculation topic distribution for each document based on same source.'''
         matrix = np.zeros((self.num_docs, self.num_topics))
         for doc_id in range(self.num_docs):
             topic2cnt = self.doc2topic2cnt[doc_id]
