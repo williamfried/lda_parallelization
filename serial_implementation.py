@@ -28,6 +28,13 @@ class LDA:
         '''Calculate perplexity score after each iteration to determine if the algorithm has converged. '''
         pass
 
+    def update_counts(self, doc_id, word, topic, direction):
+        val = 1 if direction == 'up' else -1
+        self.doc2word2topic2cnt[doc_id][word][topic] += val
+        self.doc2topic2cnt[doc_id][topic] += val
+        self.topic2cnt[topic] += val
+        self.word2topic2cnt[word][topic] += val
+
     def fit(self, doc2word2cnt):
         '''Perform LDA inference algorithm as described in paper.'''
 
@@ -59,14 +66,7 @@ class LDA:
                 random_topics = np.random.choice(self.num_topics, word_cnt)
 
                 for random_topic in random_topics:
-
-                    # store topic assignment of word
-                    self.doc2word2topic2cnt[doc_id][word][random_topic] += 1
-
-                    # update counts needed for updates
-                    self.doc2topic2cnt[doc_id][random_topic] += 1
-                    self.topic2cnt[random_topic] += 1
-                    self.word2topic2cnt[word][random_topic] += 1
+                    self.update_counts(doc_id, word, random_topic, 'up')
 
         self.vocab_size = len(self.word2topic2cnt)
         self.beta_sum = self.vocab_size * self.beta
@@ -88,10 +88,7 @@ class LDA:
                     for previous_topic in previous_topics:
 
                         # decrement counts
-                        self.doc2word2topic2cnt[doc_id][word][previous_topic] -= 1
-                        self.doc2topic2cnt[doc_id][previous_topic] -= 1
-                        self.topic2cnt[previous_topic] -= 1
-                        self.word2topic2cnt[word][previous_topic] -= 1
+                        self.update_counts(doc_id, word, previous_topic, 'down')
 
                         # assign word to new topic
                         topic_masses = np.array([self.calculate_mass(self.doc2topic2cnt[doc_id][topic_idx],
@@ -103,10 +100,7 @@ class LDA:
                         new_topic = np.random.choice(self.num_topics, 1, p=topic_masses_norm)[0]
 
                         # increment counts
-                        self.doc2word2topic2cnt[doc_id][word][new_topic] += 1
-                        self.doc2topic2cnt[doc_id][new_topic] += 1
-                        self.topic2cnt[new_topic] += 1
-                        self.word2topic2cnt[word][new_topic] += 1
+                        self.update_counts(doc_id, word, new_topic, 'up')
 
             iter_num += 1
 
