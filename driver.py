@@ -18,7 +18,7 @@ for doc_id, word2cnt in doc_id2counts_.items():
 
 num2word = {v: k for k, v in word2num.items()}
 
-num_topics = 3
+num_topics = 10
 lda = LDA(num_topics, max_iter=10)
 t0 = time.perf_counter()
 lda.fit(doc_id2counts)

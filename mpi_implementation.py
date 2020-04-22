@@ -61,12 +61,12 @@ class LDA:
     def fit(self, entire_doc2word2cnt):
         '''Perform LDA inference algorithm as described in paper.'''
 
-        doc_nums = self.elements_per_process(len(entire_doc2word2cnt))
+        doc_partitions = self.elements_per_process(len(entire_doc2word2cnt))
 
         doc_ids = list(entire_doc2word2cnt.keys())
 
-        docs_before = sum(doc_nums[:self.mpi_rank])
-        assigned_doc_ids = doc_ids[docs_before: docs_before + doc_nums[self.mpi_rank]]
+        docs_before = sum(doc_partitions[:self.mpi_rank])
+        assigned_doc_ids = doc_ids[docs_before: docs_before + doc_partitions[self.mpi_rank]]
 
         doc2word2cnt = {i: entire_doc2word2cnt[doc_id] for i, doc_id in enumerate(assigned_doc_ids)}
 
@@ -100,8 +100,6 @@ class LDA:
                 for random_topic in random_topics:
                     self.update_counts(doc_id, word, random_topic, 'up')
 
-       # print(self.mpi_rank, self.topic2cnt)
-
         topic2cnt_lst = self.comm.gather(self.topic2cnt, root=0)
 
         if self.mpi_rank == 0:
@@ -114,24 +112,32 @@ class LDA:
 
         self.topic2cnt = self.comm.bcast(topic2cnt_all_nodes, root=0)
 
-        #print(self.mpi_rank, self.topic2cnt)
-
         word2topic2cnt_lst = self.comm.gather(self.word2topic2cnt, root=0)
 
         if self.mpi_rank == 0:
             word2topic2cnt_all_nodes = {}
             for word2topic2cnt in word2topic2cnt_lst:
                 for word in word2topic2cnt:
-                    if word not in
+                    if word not in word2topic2cnt_all_nodes:
+                        word2topic2cnt_all_nodes[word] = {i: 0 for i in range(self.num_topics)}
+                    topic2cnt = word2topic2cnt[word]
+                    for topic in topic2cnt:
+                        word2topic2cnt_all_nodes[word][topic] += topic2cnt[topic]
 
+            vocab_size = len(word2topic2cnt_all_nodes)
 
-        # if self.mpi_rank == 0:
-        #     return 0
-        sys.exit(2)
+            word_partitions = self.elements_per_process(vocab_size)
+            scatter_lst = []
+            words = list(word2topic2cnt_all_nodes.keys())
+            start_idx = 0
+            for word_partition in word_partitions:
+                scatter_lst.append(([{word: word2topic2cnt_all_nodes[word]}
+                                    for word in words[start_idx: start_idx + word_partition]], vocab_size))
+                start_idx += word_partition
+        else:
+            scatter_lst = None
 
-
-        # post MPI sending
-        self.vocab_size = len(self.word2topic2cnt)
+        token_queue, self.vocab_size = self.comm.scatter(scatter_lst, root=0)
         self.beta_sum = self.vocab_size * self.beta
 
         # perform collapsed Gibbs sampling
