@@ -8,11 +8,10 @@ import time
 class LDA:
 
     def __init__(self, num_topics, alpha=None, beta=None, batch_fraction=0.25, min_batch_size=100,
-                 max_iter=5, random_state=206):
+                 max_iter=2, random_state=205):
         self.num_topics = num_topics
         self.alpha = alpha if alpha else 1 / num_topics
         self.beta = beta if beta else 1 / num_topics
-        self.max_iter = max_iter
 
         self.vocab_size = None
         self.beta_sum = None
@@ -35,6 +34,7 @@ class LDA:
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
         self.mpi_size = self.comm.size
+        self.max_iter = max_iter * self.mpi_size
         self.topic2cnt_global = 'topic2cnt_global'
 
     def calculate_mass(self, n_doc, n_word, n_all):
@@ -177,10 +177,11 @@ class LDA:
 
         iter_num = 0
 
+        terminate = False
+
         topic2cnt_snapshot = self.topic2cnt_local
 
         while iter_num < self.max_iter:
-            #print('iter_num', self.mpi_rank, iter_num)
             queue_len = len(self.token_queue)
             next_queue = []
             send_lst = []
@@ -192,9 +193,18 @@ class LDA:
                     receive_lst = self.comm.recv(source=(self.mpi_rank - 1) % self.mpi_size, tag=1)
                     next_queue.extend(receive_lst)
 
+                # if self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG):
+                #     message = self.comm.recv(source=MPI.ANY_SOURCE)
+                #     print(message)
+                #     if isinstance(message, bool):
+                #         print(f'{self.mpi_rank} was told to stop')
+                #         terminate = message
+                #         break
+
                 word = list(token.keys())[0]
 
                 if word == self.topic2cnt_global:
+                    #print(f'{self.mpi_rank} has the global token')
                     topic2cnt_global = token[word]
                     for topic in topic2cnt_global:
                         topic2cnt_global[topic] += (self.topic2cnt_local[topic] - topic2cnt_snapshot[topic])
@@ -239,18 +249,50 @@ class LDA:
                 if self.comm.Iprobe(source=(self.mpi_rank + 1) % self.mpi_size, tag=9):
                     # print(f'''{self.mpi_rank} was told to stop from {(self.mpi_rank + 1) % self.mpi_size} and is now telling {(self.mpi_rank - 1) % self.mpi_size} to stop''')
                     self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
-                    sys.exit(2)
+                    terminate = True
+                    break
 
                 if len(send_lst) >= self.batch_size and i < (queue_len - self.min_batch_size):
                     self.comm.send(send_lst, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
                     send_lst = []
 
+            if terminate:
+                break
+
             self.comm.send(send_lst, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
             self.token_queue = next_queue
             iter_num += 1
 
+        # if not terminate:
+        #     first_processor_to_finish = self.mpi_rank
+        #     print(f'{first_processor_to_finish} is first to finish')
+        #     self.comm.bcast(True, root=first_processor_to_finish)
+        #word2topic2cnt_lst = self.comm.gather(self.token_queue, root=first_processor_to_finish)
+        #print(word2topic2cnt_lst)
         # print(f'{self.mpi_rank} is done -- telling {(self.mpi_rank - 1) % self.mpi_size} to stop')
-        self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
+        if not terminate:
+            #first_node_to_finish = self.mpi_rank
+            #print(f'{first_node_to_finish} is first to finish')
+            self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
+
+        topic2cnt_lst = self.comm.gather(self.topic2cnt_local, root=0)
+
+        if self.mpi_rank == 0:
+            print(topic2cnt_lst)
+            topic2cnt_avg = {i: 0 for i in range(self.num_topics)}
+            for topic2cnt in topic2cnt_lst:
+                for topic in topic2cnt:
+                    topic2cnt_avg[topic] += (topic2cnt[topic] / self.mpi_size)
+
+            topic2cnt_avg = {k: round(v) for k, v in topic2cnt_avg.items()}
+
+
+
+        # sys.exit(2)
+
+        # if self.mpi_rank == 0:
+        #     topic2cnt_lst = self.comm.gather(self.topic2cnt_local, root=0)
+
 
     def get_topic_distributions(self):
         '''Calculate word distribution for each topic using methodology described here:
