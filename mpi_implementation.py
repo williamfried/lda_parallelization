@@ -2,13 +2,12 @@ from collections import defaultdict
 from mpi4py import MPI
 import numpy as np
 import sys
-import time
 
 
 class LDA:
 
     def __init__(self, num_topics, alpha=None, beta=None, batch_fraction=0.25, min_batch_size=100,
-                 max_iter=2, random_state=205):
+                 max_iter=40, random_state=205):
         self.num_topics = num_topics
         self.alpha = alpha if alpha else 1 / num_topics
         self.beta = beta if beta else 1 / num_topics
@@ -35,7 +34,12 @@ class LDA:
         self.mpi_rank = self.comm.Get_rank()
         self.mpi_size = self.comm.size
         self.max_iter = max_iter * self.mpi_size
-        self.topic2cnt_global = 'topic2cnt_global'
+        self.s_token = 's_token'
+
+        if self.mpi_rank == 0:
+            self.topic2cnt_global = None
+            self.doc2topic2cnt_global = None
+            self.word2topic2cnt_global = None
 
     def calculate_mass(self, n_doc, n_word, n_all):
         '''Compute the unnormalized mass associated with a specific topic given the relevant count information.'''
@@ -78,7 +82,7 @@ class LDA:
         doc_ids = list(entire_doc2word2cnt.keys())
         docs_before = sum(doc_partitions[:self.mpi_rank])
         assigned_doc_ids = doc_ids[docs_before: docs_before + doc_partitions[self.mpi_rank]]
-        doc2word2cnt = {i: entire_doc2word2cnt[doc_id] for i, doc_id in enumerate(assigned_doc_ids)}
+        doc2word2cnt = {doc_id: entire_doc2word2cnt[doc_id] for doc_id in assigned_doc_ids}
         self.num_docs = len(doc2word2cnt)
 
         # number of words assigned to topic z across all documents
@@ -88,10 +92,10 @@ class LDA:
         word2topic2cnt = {}
 
         # number of words in each document that are assigned to each topic
-        self.doc2topic2cnt = {doc_num: {i: 0 for i in range(self.num_topics)} for doc_num in range(self.num_docs)}
+        self.doc2topic2cnt = {doc_id: {i: 0 for i in range(self.num_topics)} for doc_id in assigned_doc_ids}
 
         # number of times each word is assigned to each topic in each document
-        self.doc2word2topic2cnt = {i: {} for i in range(self.num_docs)}
+        self.doc2word2topic2cnt = {doc_id: {} for doc_id in assigned_doc_ids}
 
         # keep track of documents in which each word appears
         self.word2docs = defaultdict(list)
@@ -168,7 +172,7 @@ class LDA:
         self.batch_size = round(len(self.token_queue) * self.batch_fraction)
 
         if self.mpi_rank == 0:
-            self.token_queue.append({self.topic2cnt_global: self.topic2cnt_local})
+            self.token_queue.append({self.s_token: self.topic2cnt_local})
 
     def fit(self, entire_doc2word2cnt):
         '''Perform LDA inference algorithm as described in paper.'''
@@ -176,15 +180,17 @@ class LDA:
         self.initialize(entire_doc2word2cnt)
 
         iter_num = 0
-
         terminate = False
+        next_queue = []
 
         topic2cnt_snapshot = self.topic2cnt_local
 
         while iter_num < self.max_iter:
-            queue_len = len(self.token_queue)
+            if iter_num > 0:
+                self.token_queue = next_queue
             next_queue = []
             send_lst = []
+            queue_len = len(self.token_queue)
 
             # process each token in queue
             for i, token in enumerate(self.token_queue):
@@ -203,8 +209,7 @@ class LDA:
 
                 word = list(token.keys())[0]
 
-                if word == self.topic2cnt_global:
-                    #print(f'{self.mpi_rank} has the global token')
+                if word == self.s_token:
                     topic2cnt_global = token[word]
                     for topic in topic2cnt_global:
                         topic2cnt_global[topic] += (self.topic2cnt_local[topic] - topic2cnt_snapshot[topic])
@@ -260,7 +265,6 @@ class LDA:
                 break
 
             self.comm.send(send_lst, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
-            self.token_queue = next_queue
             iter_num += 1
 
         # if not terminate:
@@ -276,23 +280,34 @@ class LDA:
             self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
 
         topic2cnt_lst = self.comm.gather(self.topic2cnt_local, root=0)
+        doc2topic2cnt_lst = self.comm.gather(self.doc2topic2cnt, root=0)
+        next_queue_lst = self.comm.gather(next_queue, root=0)
+        token_queue_lst = self.comm.gather(self.token_queue, root=0)
 
         if self.mpi_rank == 0:
-            print(topic2cnt_lst)
-            topic2cnt_avg = {i: 0 for i in range(self.num_topics)}
+            topic2cnt_global = {i: 0 for i in range(self.num_topics)}
             for topic2cnt in topic2cnt_lst:
                 for topic in topic2cnt:
-                    topic2cnt_avg[topic] += (topic2cnt[topic] / self.mpi_size)
+                    topic2cnt_global[topic] += (topic2cnt[topic] / self.mpi_size)
 
-            topic2cnt_avg = {k: round(v) for k, v in topic2cnt_avg.items()}
+            self.topic2cnt_global = {k: round(v) for k, v in topic2cnt_global.items()}
 
+            self.doc2topic2cnt_global = {}
+            for doc2topic2cnt in doc2topic2cnt_lst:
+                self.doc2topic2cnt_global.update(doc2topic2cnt)
 
+            self.word2topic2cnt_global = {}
+            for token_queue in token_queue_lst:
+                for token in token_queue:
+                    self.word2topic2cnt_global.update(token)
 
-        # sys.exit(2)
+            for next_queue in next_queue_lst:
+                for token in next_queue:
+                    self.word2topic2cnt_global.update(token)
+            del self.word2topic2cnt_global[self.s_token]
 
-        # if self.mpi_rank == 0:
-        #     topic2cnt_lst = self.comm.gather(self.topic2cnt_local, root=0)
-
+        else:
+            sys.exit(0)
 
     def get_topic_distributions(self):
         '''Calculate word distribution for each topic using methodology described here:
@@ -300,8 +315,8 @@ class LDA:
         matrix = np.zeros((self.num_topics, self.vocab_size))
         for topic in range(self.num_topics):
             for word in range(self.vocab_size):
-                matrix[topic, word] = ((self.word2topic2cnt[word][topic] + self.beta) /
-                                       (self.topic2cnt[topic]) + self.beta_sum)
+                matrix[topic, word] = ((self.word2topic2cnt_global[word][topic] + self.beta) /
+                                       (self.topic2cnt_global[topic]) + self.beta_sum)
 
         return matrix
 
@@ -309,10 +324,10 @@ class LDA:
         '''Calculation topic distribution for each document based on same source.'''
         matrix = np.zeros((self.num_docs, self.num_topics))
         for doc_id in range(self.num_docs):
-            topic2cnt = self.doc2topic2cnt[doc_id]
+            topic2cnt = self.doc2topic2cnt_global[doc_id]
             topic_assigned_num = sum([topic2cnt[topic] > 0 for topic in range(self.num_topics)])
             for topic in range(self.num_topics):
-                matrix[doc_id, topic] = ((self.doc2topic2cnt[doc_id][topic] + self.alpha) /
+                matrix[doc_id, topic] = ((self.doc2topic2cnt_global[doc_id][topic] + self.alpha) /
                                          (topic_assigned_num + self.num_topics * self.alpha))
 
         return matrix
