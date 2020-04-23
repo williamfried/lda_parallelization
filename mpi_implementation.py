@@ -2,12 +2,13 @@ from collections import defaultdict
 from mpi4py import MPI
 import numpy as np
 import sys
+import time
 
 
 class LDA:
 
     def __init__(self, num_topics, alpha=None, beta=None, batch_fraction=0.25, min_batch_size=100,
-                 max_iter=50, random_state=205):
+                 max_iter=5, random_state=206):
         self.num_topics = num_topics
         self.alpha = alpha if alpha else 1 / num_topics
         self.beta = beta if beta else 1 / num_topics
@@ -16,7 +17,8 @@ class LDA:
         self.vocab_size = None
         self.beta_sum = None
 
-        self.topic2cnt = None
+        # self.topic2cnt = None
+        self.topic2cnt_local = None
         # self.word2topic2cnt = None
         self.doc2topic2cnt = None
         self.num_docs = None
@@ -33,6 +35,7 @@ class LDA:
         self.comm = MPI.COMM_WORLD
         self.mpi_rank = self.comm.Get_rank()
         self.mpi_size = self.comm.size
+        self.topic2cnt_global = 'topic2cnt_global'
 
     def calculate_mass(self, n_doc, n_word, n_all):
         '''Compute the unnormalized mass associated with a specific topic given the relevant count information.'''
@@ -46,7 +49,7 @@ class LDA:
         val = 1 if direction == 'up' else -1
         self.doc2word2topic2cnt[doc_id][word][topic] += val
         self.doc2topic2cnt[doc_id][topic] += val
-        self.topic2cnt[topic] += val
+        self.topic2cnt_local[topic] += val
         # self.word2topic2cnt[word][topic] += val
 
     def elements_per_process(self, total_elements):
@@ -79,7 +82,7 @@ class LDA:
         self.num_docs = len(doc2word2cnt)
 
         # number of words assigned to topic z across all documents
-        self.topic2cnt = {i: 0 for i in range(self.num_topics)}
+        self.topic2cnt_local = {i: 0 for i in range(self.num_topics)}
 
         # number of times each word is assigned to each topic across all documents
         word2topic2cnt = {}
@@ -112,7 +115,7 @@ class LDA:
                     word2topic2cnt[word][random_topic] += 1
 
         # each node sends topic count info to node 0
-        topic2cnt_lst = self.comm.gather(self.topic2cnt, root=0)
+        topic2cnt_lst = self.comm.gather(self.topic2cnt_local, root=0)
 
         # node 0 combines (adds) the info from every other node to calculate complete topic count
         if self.mpi_rank == 0:
@@ -124,7 +127,7 @@ class LDA:
             topic2cnt_all_nodes = None
 
         # node 0 sends complete topic count to each node
-        self.topic2cnt = self.comm.bcast(topic2cnt_all_nodes, root=0)
+        self.topic2cnt_local = self.comm.bcast(topic2cnt_all_nodes, root=0)
 
         # each node sends word topic count info to node 0
         word2topic2cnt_lst = self.comm.gather(word2topic2cnt, root=0)
@@ -146,6 +149,11 @@ class LDA:
             word_partitions = self.elements_per_process(vocab_size)
             scatter_lst = []
             words = list(word2topic2cnt_all_nodes.keys())
+
+            # shuffle words so that each node receives random words (words with lower indices appear on average
+            # more times in the corpus, so they are more expensive to process)
+            np.random.shuffle(words)
+
             start_idx = 0
             for word_partition in word_partitions:
                 scatter_lst.append(([{word: word2topic2cnt_all_nodes[word]}
@@ -159,69 +167,90 @@ class LDA:
         self.beta_sum = self.vocab_size * self.beta
         self.batch_size = round(len(self.token_queue) * self.batch_fraction)
 
+        if self.mpi_rank == 0:
+            self.token_queue.append({self.topic2cnt_global: self.topic2cnt_local})
+
     def fit(self, entire_doc2word2cnt):
         '''Perform LDA inference algorithm as described in paper.'''
 
         self.initialize(entire_doc2word2cnt)
 
-        # perform collapsed Gibbs sampling
         iter_num = 0
+
+        topic2cnt_snapshot = self.topic2cnt_local
+
         while iter_num < self.max_iter:
-            print(iter_num)
+            #print('iter_num', self.mpi_rank, iter_num)
             queue_len = len(self.token_queue)
             next_queue = []
             send_lst = []
-            receive_lst = []
-            req = self.comm.Irecv(receive_lst, source=(self.mpi_rank - 1) % self.mpi_size)
 
             # process each token in queue
             for i, token in enumerate(self.token_queue):
-                
-                if req.Test():
+
+                if self.comm.Iprobe(source=(self.mpi_rank - 1) % self.mpi_size, tag=1):
+                    receive_lst = self.comm.recv(source=(self.mpi_rank - 1) % self.mpi_size, tag=1)
                     next_queue.extend(receive_lst)
-                    req = self.comm.Irecv(receive_lst, source=(self.mpi_rank - 1) % self.mpi_size)
 
                 word = list(token.keys())[0]
-                w_vec = token[word]
-                relevant_doc_ids = self.word2docs[word]
 
-                for doc_id in relevant_doc_ids:
-                    topic2cnt = self.doc2word2topic2cnt[doc_id][word]
-                    previous_topics = []
-                    for topic, cnt in topic2cnt.items():
-                        if cnt > 0:
-                            previous_topics.extend([topic] * cnt)
+                if word == self.topic2cnt_global:
+                    topic2cnt_global = token[word]
+                    for topic in topic2cnt_global:
+                        topic2cnt_global[topic] += (self.topic2cnt_local[topic] - topic2cnt_snapshot[topic])
+                    topic2cnt_snapshot = topic2cnt_global
+                    self.topic2cnt_local = topic2cnt_global
+                    send_lst.append({word: topic2cnt_global})
 
-                    np.random.shuffle(previous_topics)
+                else:
+                    w_vec = token[word]
+                    relevant_doc_ids = self.word2docs[word]
 
-                    for previous_topic in previous_topics:
+                    for doc_id in relevant_doc_ids:
+                        topic2cnt = self.doc2word2topic2cnt[doc_id][word]
+                        previous_topics = []
+                        for topic, cnt in topic2cnt.items():
+                            if cnt > 0:
+                                previous_topics.extend([topic] * cnt)
 
-                        # decrement counts
-                        self.update_counts(doc_id, word, previous_topic, 'down')
-                        w_vec[previous_topic] -= 1
+                        np.random.shuffle(previous_topics)
 
-                        # assign word to new topic
-                        topic_masses = np.array([self.calculate_mass(self.doc2topic2cnt[doc_id][topic_idx],
-                                                                     w_vec[topic_idx],
-                                                                     self.topic2cnt[topic_idx])
-                                                 for topic_idx in range(self.num_topics)])
-                        topic_masses_norm = topic_masses / np.sum(topic_masses)
+                        for previous_topic in previous_topics:
 
-                        new_topic = np.random.choice(self.num_topics, 1, p=topic_masses_norm)[0]
+                            # decrement counts
+                            self.update_counts(doc_id, word, previous_topic, 'down')
+                            w_vec[previous_topic] -= 1
 
-                        # increment counts
-                        self.update_counts(doc_id, word, new_topic, 'up')
-                        w_vec[new_topic] += 1
+                            # assign word to new topic
+                            topic_masses = np.array([self.calculate_mass(self.doc2topic2cnt[doc_id][topic_idx],
+                                                                         w_vec[topic_idx],
+                                                                         self.topic2cnt_local[topic_idx])
+                                                     for topic_idx in range(self.num_topics)])
+                            topic_masses_norm = topic_masses / np.sum(topic_masses)
 
-                send_lst.append(w_vec)
+                            new_topic = np.random.choice(self.num_topics, 1, p=topic_masses_norm)[0]
+
+                            # increment counts
+                            self.update_counts(doc_id, word, new_topic, 'up')
+                            w_vec[new_topic] += 1
+
+                    send_lst.append({word: w_vec})
+
+                if self.comm.Iprobe(source=(self.mpi_rank + 1) % self.mpi_size, tag=9):
+                    # print(f'''{self.mpi_rank} was told to stop from {(self.mpi_rank + 1) % self.mpi_size} and is now telling {(self.mpi_rank - 1) % self.mpi_size} to stop''')
+                    self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
+                    sys.exit(2)
+
                 if len(send_lst) >= self.batch_size and i < (queue_len - self.min_batch_size):
-                    self.comm.send(send_lst, dest=(self.mpi_rank + 1) % self.mpi_size)
+                    self.comm.send(send_lst, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
                     send_lst = []
 
-            self.comm.send(send_lst, dest=(self.mpi_rank + 1) % self.mpi_size)
-            send_lst = []
+            self.comm.send(send_lst, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
             self.token_queue = next_queue
             iter_num += 1
+
+        # print(f'{self.mpi_rank} is done -- telling {(self.mpi_rank - 1) % self.mpi_size} to stop')
+        self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
 
     def get_topic_distributions(self):
         '''Calculate word distribution for each topic using methodology described here:
