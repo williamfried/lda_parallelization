@@ -186,6 +186,10 @@ class LDA:
         topic2cnt_snapshot = self.topic2cnt_local
 
         while iter_num < self.max_iter:
+
+            print(f'node {self.mpi_rank} is on iteration {iter_num}')
+            sys.stdout.flush()
+
             if iter_num > 0:
                 self.token_queue = next_queue
             next_queue = []
