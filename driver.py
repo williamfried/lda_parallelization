@@ -1,8 +1,7 @@
 import json
 import numpy as np
-from mpi_implementation import LDA
+from mpi_imp import LDA
 import time
-import sys
 
 top_word_num = 30
 
