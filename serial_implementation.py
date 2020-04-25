@@ -128,3 +128,46 @@ class LDA:
                                          (topic_assigned_num + self.num_topics * self.alpha))
 
         return matrix
+
+    def get_topic_coherence(self, top_word_num = None):
+
+        if top_word_num == None:
+            top_word_num = self.num_topics
+
+        # fist map each word to all the doc ids it appears in
+        word2docs = dict()
+
+        for word in range(self.vocab_size):
+            list_of_docs = []
+            for doc in range(self.num_docs):
+                if word in self.doc2word2cnt[doc].keys():
+                    list_of_docs.append(doc)
+            word2docs[word] = list_of_docs
+
+        coherences = []
+        topic_distributions = self.get_topic_distributions()
+        topic_distributions_sorted = np.argsort(-topic_distributions, axis=1)
+        top_words = topic_distributions_sorted[:, :top_word_num]
+
+        for topic in range(self.num_topics):
+            top_words_topic = top_words[topic,:]
+            coherence = 0
+
+            for m, v_m in enumerate(top_words_topic[1:]):
+                for v_l in top_words_topic[:m+1]:
+                    # get co-occurence
+                    set_m = set(word2docs[v_m])
+                    set_l = set(word2docs[v_l])
+                    num = len(word2docs[v_m])+ len(word2docs[v_l]) - len(set_m.union(set_l)) + 1
+                    denom = len(word2docs[v_l])
+                    coherence += np.log(num/denom)
+
+            coherences.append(coherence)
+
+        # normalize by number of top words
+        coherences = [k/top_word_num for k in coherences]
+
+        print('Average topic coherence is : {}'.format(np.mean(coherences)))
+        print('With min and max respectively : {} & {}'.format(np.min(coherences), np.max(coherences)))
+
+        return coherences
