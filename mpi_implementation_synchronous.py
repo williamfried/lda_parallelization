@@ -1,4 +1,5 @@
 from collections import defaultdict
+from copy import deepcopy
 from mpi4py import MPI
 import numpy as np
 import sys
@@ -171,8 +172,8 @@ class LDA:
 
         self.initialize(entire_doc2word2cnt)
 
-        # local snapshot of s
-        topic2cnt_snapshot = self.topic2cnt_local
+        # local snapshot of S
+        topic2cnt_snapshot = deepcopy(self.topic2cnt_local)
 
         for iter_num in range(self.max_iter):
 
@@ -192,8 +193,8 @@ class LDA:
                     topic2cnt_global = token[word]
                     for topic in topic2cnt_global:
                         topic2cnt_global[topic] += (self.topic2cnt_local[topic] - topic2cnt_snapshot[topic])
-                    topic2cnt_snapshot = topic2cnt_global
-                    self.topic2cnt_local = topic2cnt_global
+                    topic2cnt_snapshot = deepcopy(topic2cnt_global)
+                    self.topic2cnt_local = deepcopy(topic2cnt_global)
 
                     # add global S token to queue
                     send_queue.append({self.s_token: topic2cnt_global})
@@ -238,13 +239,9 @@ class LDA:
             print(f'node {self.mpi_rank} is on iteration {iter_num}')
             sys.stdout.flush()
 
-            # send queue to right node
-            rec_send = self.comm.isend(send_queue, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
-
-            # receive queue from left node
-            rec_recv = self.comm.irecv(700000, source=(self.mpi_rank - 1) % self.mpi_size, tag=1)
-            rec_send.wait()
-            self.token_queue = rec_recv.wait()
+            # send queue to right node and receive queue from left node
+            self.token_queue = self.comm.sendrecv(sendobj=send_queue, dest=(self.mpi_rank + 1) % self.mpi_size,
+                                                  source=(self.mpi_rank - 1) % self.mpi_size)
 
             # wait for all nodes to reach this point before proceeding to next iteration
             self.comm.Barrier()

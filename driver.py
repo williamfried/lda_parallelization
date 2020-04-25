@@ -1,6 +1,6 @@
 import json
 import numpy as np
-from mpi_imp import LDA
+from mpi_implementation_synchronous import LDA
 import time
 
 top_word_num = 30
@@ -22,6 +22,7 @@ lda = LDA(num_topics)
 t0 = time.perf_counter()
 lda.fit(doc_id2counts)
 print(time.perf_counter() - t0)
+
 topic_distributions = lda.get_topic_distributions()
 document_distributions = lda.get_document_distributions()
 
