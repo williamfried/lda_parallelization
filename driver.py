@@ -2,6 +2,7 @@ import json
 import numpy as np
 from mpi_imp import LDA
 import time
+import sys
 
 top_word_num = 30
 
@@ -22,12 +23,15 @@ lda = LDA(num_topics)
 t0 = time.perf_counter()
 lda.fit(doc_id2counts)
 print(time.perf_counter() - t0)
+#sys.exit(2)
 topic_distributions = lda.get_topic_distributions()
 document_distributions = lda.get_document_distributions()
 
 topic_distributions_sorted = np.argsort(-topic_distributions, axis=1)
 
 top_words = np.vectorize(num2word.get)(topic_distributions_sorted)[:, :top_word_num]
+
+#top_words = topic_distributions_sorted[:, :top_word_num]
 
 for i in range(num_topics):
     print(i)

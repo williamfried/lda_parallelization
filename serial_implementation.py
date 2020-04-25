@@ -104,6 +104,8 @@ class LDA:
 
             iter_num += 1
 
+        print(self.topic2cnt)
+
     def get_topic_distributions(self):
         '''Calculate word distribution for each topic using methodology described here:
         https://stats.stackexchange.com/questions/346329/in-lda-after-collapsed-gibbs-sampling-how-to-estimate-values-of-other-latent-v'''

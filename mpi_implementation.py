@@ -2,7 +2,6 @@ from collections import defaultdict
 from mpi4py import MPI
 import numpy as np
 import sys
-import time
 from copy import deepcopy
 
 
@@ -186,7 +185,7 @@ class LDA:
         next_queue = []
         send_queue = []
 
-        topic2cnt_snapshot = self.topic2cnt_local
+        topic2cnt_snapshot = deepcopy(self.topic2cnt_local)
 
         max_words_per_iteration = len(self.token_queue) + 2
 
@@ -248,8 +247,8 @@ class LDA:
                         topic2cnt_global = token[word]
                         for topic in topic2cnt_global:
                             topic2cnt_global[topic] += (self.topic2cnt_local[topic] - topic2cnt_snapshot[topic])
-                        topic2cnt_snapshot = topic2cnt_global
-                        self.topic2cnt_local = topic2cnt_global
+                        topic2cnt_snapshot = deepcopy(topic2cnt_global)
+                        self.topic2cnt_local = deepcopy(topic2cnt_global)
                         # self.comm.send({word: topic2cnt_global}, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
                         send_queue.append({word: topic2cnt_global})
 
