@@ -6,11 +6,13 @@ np_path = np.get_include()
 ext_modules = [
     Extension(
         "sampler", ["sampler.pyx"],
-        # extra_compile_args=['-fopenmp'],extra_link_args=['-fopenmp']
+    ),
+    Extension(
+        "serial_cgs_cython", ["serial_cgs_cython.pyx"],
     )
 ]
 setup(
     ext_modules=cythonize(ext_modules),
-    include_dirs=[np_path,]
+    include_dirs=[np_path, ],
 )
 

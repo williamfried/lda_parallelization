@@ -1,3 +1,4 @@
+# distutils: language = c++
 cimport cython
 from cpython.pycapsule cimport PyCapsule_GetPointer
 from numpy.random import PCG64, SeedSequence
@@ -7,7 +8,7 @@ cimport numpy as np
 from libc.stdlib cimport malloc, free
 from cython.parallel import prange
 
-np.import_array()
+# np.import_array()
 
 
 cdef int bin_search(double *cmf, int l, int r, double val) nogil:
@@ -22,33 +23,39 @@ cdef int bin_search(double *cmf, int l, int r, double val) nogil:
             return bin_search(cmf, middle, r, val)
 
 
-cdef int categorical_sample(bitgen_t *bitgen_state, double[:] pmf) nogil:
+cdef int categorical_sample(bitgen_t *bitgen_state, double[:] pmf,
+                            double *cmf=NULL) nogil:
     # Note that this does in work in the special case where prob[i] == 0,
     # in which case the bin_search on the cmf does not return what we want
-    # if the rand_uniform happens to be exactly the value of cmf[i]
+    # if the rand_uniform happens to be exactly the value of my_cmf[i]
     cdef int total_classes = pmf.shape[0]
     cdef double rand_uniform = bitgen_state.next_double(bitgen_state)
-    cdef double *cmf = <double *> malloc(total_classes * sizeof(double))
+    cdef double *my_cmf
+    if cmf is NULL:
+        my_cmf = <double *> malloc(total_classes * sizeof(double))
+    else:
+        my_cmf = cmf
     cdef int i
     cdef double total_mass = 0.
     for i in range(total_classes):
         total_mass += pmf[i]
-        cmf[i] = total_mass
+        my_cmf[i] = total_mass
     rand_uniform *= total_mass
-    cdef int output = bin_search(cmf, 0, total_classes, rand_uniform)
-    free(cmf)
+    cdef int output = bin_search(my_cmf, 0, total_classes, rand_uniform)
+    if cmf is NULL:
+        free(my_cmf)
     return output
 
-rand_gen = PCG64(0)
-cdef char *capsule_name = "BitGenerator"
-cdef bitgen_t *bitgen_state = <bitgen_t *> PyCapsule_GetPointer(
-    rand_gen.capsule, capsule_name
-)
+# rand_gen = PCG64(0)
+# cdef char *capsule_name = "BitGenerator"
+# cdef bitgen_t *bitgen_state = <bitgen_t *> PyCapsule_GetPointer(
+#     rand_gen.capsule, capsule_name
+# )
 
 # cdef double[:] pmf = np.array([0.1, 0.2, 0.5, 1])
-cpdef my_func(int n, double[:] pmf):
-    cdef int i
-    return [categorical_sample(bitgen_state, pmf) for i in range(n)]
+# cpdef my_func(int n, double[:] pmf):
+#     cdef int i
+#     return [categorical_sample(bitgen_state, pmf) for i in range(n)]
 
 
 # cdef int num_proc = 4
