@@ -260,8 +260,6 @@ class LDA:
             self.word2topic2cnt_global = {}
             for token_queue in token_queue_lst:
                 for token in token_queue:
-                    if list(token.keys())[0] == self.s_token:
-                        print(token)
                     self.word2topic2cnt_global.update(token)
 
             self.topic2cnt_global = self.word2topic2cnt_global[self.s_token]

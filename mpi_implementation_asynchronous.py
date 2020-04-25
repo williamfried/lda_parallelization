@@ -1,14 +1,14 @@
 from collections import defaultdict
+from copy import deepcopy
 from mpi4py import MPI
 import numpy as np
 import sys
-from copy import deepcopy
 
 
 class LDA:
 
     def __init__(self, num_topics, alpha=None, beta=None, batch_fraction=0.25, min_batch_size=100,
-                 max_iter=10, random_state=207):
+                 max_iter=10, random_state=205):
         self.num_topics = num_topics
         self.alpha = alpha if alpha else 1 / num_topics
         self.beta = beta if beta else 1 / num_topics
@@ -16,9 +16,7 @@ class LDA:
         self.vocab_size = None
         self.beta_sum = None
 
-        # self.topic2cnt = None
         self.topic2cnt_local = None
-        # self.word2topic2cnt = None
         self.doc2topic2cnt = None
         self.num_docs = None
         self.doc2word2topic2cnt = None
@@ -41,6 +39,7 @@ class LDA:
             self.topic2cnt_global = None
             self.doc2topic2cnt_global = None
             self.word2topic2cnt_global = None
+            self.num_docs_global = None
 
     def calculate_mass(self, n_doc, n_word, n_all):
         '''Compute the unnormalized mass associated with a specific topic given the relevant count information.'''
@@ -55,7 +54,6 @@ class LDA:
         self.doc2word2topic2cnt[doc_id][word][topic] += val
         self.doc2topic2cnt[doc_id][topic] += val
         self.topic2cnt_local[topic] += val
-        # self.word2topic2cnt[word][topic] += val
 
     def elements_per_process(self, total_elements):
         element_nums = []
@@ -184,6 +182,7 @@ class LDA:
         terminate = False
         next_queue = []
         send_queue = []
+        next_next_queue = []
 
         topic2cnt_snapshot = deepcopy(self.topic2cnt_local)
 
@@ -191,53 +190,29 @@ class LDA:
 
         while iter_num < self.max_iter:
 
-            # print(f'node {self.mpi_rank} is on iteration {iter_num}')
-            # sys.stdout.flush()
-
             if iter_num > 0:
                 self.token_queue = next_queue
 
-            next_queue = []
-            # send_queue = []
-            send_queue_temp = []
+            next_queue = next_next_queue
+            next_next_queue = []
 
             num_received = len(self.token_queue)
 
             # process each token in queue
-            # for i, token in enumerate(self.token_queue):
-            # for i in range(max_words_per_iteration):
             i = 0
             while i < max_words_per_iteration:
 
-                # if self.mpi_rank == 0:
-                #     print(i)
-
-                # if self.comm.Iprobe(source=(self.mpi_rank - 1) % self.mpi_size, tag=2):
-                #     prev_queue = self.comm.recv(source=(self.mpi_rank - 1) % self.mpi_size, tag=2)
-                #     print(i)
-                #     print(len(prev_queue))
-                #     # sys.stdout.flush()
-                #     self.token_queue.extend(prev_queue)
-
                 if self.comm.Iprobe(source=(self.mpi_rank - 1) % self.mpi_size, tag=1):
                     receive_lst = self.comm.recv(source=(self.mpi_rank - 1) % self.mpi_size, tag=1)
-                    # if len(receive_lst) == 1:
-                    #     self.token_queue.append(receive_lst)
-                    # if num_received < max_words_per_iteration - 5:
-                    #     self.token_queue.extend(receive_lst)
-                    #     num_received += len(receive_lst)
-                    # elif len(next_queue) > max_words_per_iteration - 100:
-                    #     print(self.mpi_rank, 'svbegaeg')
-                    #     sys.stdout.flush()
-                    #     self.comm.send(receive_lst, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
-                    #     # next_next_queue.extend(receive_lst)
-                    # else:
-                    #     next_queue.extend(receive_lst)
-                    next_queue.extend(receive_lst)
-                        #print(f'{self.mpi_rank}: {len(next_queue)}')
-
-                # if self.mpi_rank == 0:
-                #     print(i, self.token_queue[i])
+                    if num_received < max_words_per_iteration - 5:
+                        self.token_queue.extend(receive_lst)
+                        num_received += len(receive_lst)
+                    elif len(next_queue) > max_words_per_iteration - 100:
+                        next_next_queue.extend(receive_lst)
+                        print(len(next_next_queue))
+                        sys.stdout.flush()
+                    else:
+                        next_queue.extend(receive_lst)
 
                 try:
                     token = self.token_queue[i]
@@ -249,7 +224,6 @@ class LDA:
                             topic2cnt_global[topic] += (self.topic2cnt_local[topic] - topic2cnt_snapshot[topic])
                         topic2cnt_snapshot = deepcopy(topic2cnt_global)
                         self.topic2cnt_local = deepcopy(topic2cnt_global)
-                        # self.comm.send({word: topic2cnt_global}, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
                         send_queue.append({word: topic2cnt_global})
 
                     else:
@@ -296,19 +270,7 @@ class LDA:
                     if i > max_words_per_iteration - 5:
                         break
 
-                    # if len(send_queue):
-                    #     self.comm.send(send_queue, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
-                    #     send_queue = []
-
                 if self.comm.Iprobe(source=(self.mpi_rank + 1) % self.mpi_size, tag=9):
-                    # message = self.comm.recv(source=(self.mpi_rank + 1) % self.mpi_size, tag=9)
-                    # if message == 'reset':
-                    #     print('here again')
-                    #     sys.stdout.flush()
-                    #     self.comm.isend('reset', dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
-                    #     terminate1 = True
-                    #     break
-                    # else:
                     self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
                     terminate = True
                     break
@@ -318,61 +280,20 @@ class LDA:
 
             print(f'node {self.mpi_rank} is on iteration {iter_num} and has {num_received} tokens')
             sys.stdout.flush()
-            # if next_next_queue:
-            #     print(f'node{self.mpi_rank} has next next queue of length {len(next_next_queue)}')
 
-            #self.comm.isend(send_queue, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
+            self.comm.send(send_queue, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
+            send_queue = []
 
-            # if self.comm.Iprobe(source=(self.mpi_rank - 1) % self.mpi_size, tag=1):
-            #     receive_lst = self.comm.recv(source=(self.mpi_rank - 1) % self.mpi_size, tag=1)
-            #     # if len(receive_lst) == 1:
-            #     #     self.token_queue.append(receive_lst)
-            #     if num_received < max_words_per_iteration - 5:
-            #         print('option1')
-            #         self.token_queue.extend(receive_lst)
-            #         num_received += len(receive_lst)
-            #     elif len(next_queue) > max_words_per_iteration - 100:
-            #         print('option2')
-            #         self.comm.send(receive_lst, dest=(self.mpi_rank + 1) % self.mpi_size, tag=1)
-            #         # next_next_queue.extend(receive_lst)
-            #     else:
-            #         next_queue.extend(receive_lst)
-            #         print('option3')
-            #     sys.stdout.flush()
-
-            print('send queue length:', len(send_queue))
-            sys.stdout.flush()
-
-            rec_send = self.comm.isend(send_queue, dest=(self.mpi_rank + 1) % self.mpi_size, tag=2)
-            rec_recv = self.comm.irecv(200000, source=(self.mpi_rank - 1) % self.mpi_size, tag=2)
-            rec_send.wait()
-            receive_lst = rec_recv.wait()
-            next_queue.extend(receive_lst)
-            print('next queue length:', len(next_queue))
-
-
-
-            self.comm.Barrier()
-
-            #print(self.mpi_rank, 'past barrier')
-           # time.sleep(0.1)
             iter_num += 1
 
         if not terminate:
             self.comm.isend(None, dest=(self.mpi_rank - 1) % self.mpi_size, tag=9)
 
-        topic2cnt_lst = self.comm.gather(self.topic2cnt_local, root=0)
         doc2topic2cnt_lst = self.comm.gather(self.doc2topic2cnt, root=0)
         token_queue_lst = self.comm.gather(self.token_queue, root=0)
         next_queue_lst = self.comm.gather(next_queue, root=0)
 
         if self.mpi_rank == 0:
-            topic2cnt_global = {i: 0 for i in range(self.num_topics)}
-            for topic2cnt in topic2cnt_lst:
-                for topic in topic2cnt:
-                    topic2cnt_global[topic] += (topic2cnt[topic] / self.mpi_size)
-
-            self.topic2cnt_global = {k: round(v) for k, v in topic2cnt_global.items()}
 
             self.doc2topic2cnt_global = {}
             for doc2topic2cnt in doc2topic2cnt_lst:
@@ -387,9 +308,14 @@ class LDA:
                 for token in next_queue:
                     self.word2topic2cnt_global.update(token)
 
-            print(len(self.word2topic2cnt_global))
+            self.topic2cnt_global = self.word2topic2cnt_global[self.s_token]
 
             del self.word2topic2cnt_global[self.s_token]
+
+            print(len(self.word2topic2cnt_global))
+            sys.stdout.flush()
+
+            self.num_docs_global = len(self.doc2topic2cnt_global)
 
         else:
             sys.exit(0)
