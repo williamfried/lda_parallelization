@@ -9,6 +9,7 @@ ext_modules = [
     ),
     Extension(
         "serial_cgs_cython", ["serial_cgs_cython.pyx"],
+        extra_compile_args=['-fopenmp'], extra_link_args=['-fopenmp'],
     )
 ]
 setup(
