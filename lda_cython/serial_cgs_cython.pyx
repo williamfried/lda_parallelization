@@ -18,30 +18,30 @@ from cython.parallel cimport prange
 cdef class LDA:
     cdef vector[vector[vector[int]]] *assignment_ptr
     cdef readonly int size_vocab, size_corpus, num_topics
-    cdef readonly int[:, :] n_token, n_doc
-    cdef readonly int[:] n_all
+    cdef readonly int[:, ::1] n_token, n_doc
+    cdef readonly int[::1] n_all
     cdef readonly double alpha, beta, beta_sum
     cdef readonly int num_threads
     # We only need access to bitgen_states_ptr, but we keep rand_gen
     # to make sure that they don't get garbage collected
-    cdef object rand_gens
+    cdef list rand_gens
     cdef vector[bitgen_t *] *bitgen_states_ptr
     cdef vector[omp_lock_t] *omp_locks_ptr
     # Defined just to allocate the memory in the init;
     # would otherwise require lots of mallocs and frees of same size
-    cdef double[:, :] pmf
+    cdef double[:, ::1] pmf
 
 
     def __cinit__(self, file_name, num_topics, alpha, beta, num_threads=1,
-                  seed=None):
+                  seed=205):
         cdef int i, token, doc, count
         cdef str line
-        cdef list header, line_split, occurrences
+        cdef list line_split, occurrences
         self.num_topics = num_topics
         self.alpha = alpha
         self.beta = beta
         self.num_threads = num_threads
-        seed_sequence = SeedSequence(seed if seed is not None else 205)
+        seed_sequence = SeedSequence(seed)
         seeds = seed_sequence.spawn(self.num_threads + 1)
         np_rng = np.random.default_rng(seeds[0])
         self.rand_gens = [PCG64(s) for s in seeds[1:self.num_threads + 1]]
@@ -54,14 +54,18 @@ cdef class LDA:
                 )
             )
         with open(file_name) as file:
-            header = file.readline().strip().split(",")
-            self.size_vocab = int(header[0])
-            self.size_corpus = int(header[1])
-            n_token_np = np.zeros((self.size_vocab, self.num_topics),
-                                  dtype=np.intc)
-            n_doc_np = np.zeros((self.size_corpus, self.num_topics),
-                                dtype=np.intc)
-            n_all_np = np.zeros(self.num_topics, dtype=np.intc)
+            line_split = file.readline().strip().split(",")
+            self.size_vocab = int(line_split[0])
+            self.size_corpus = int(line_split[1])
+            self.n_token = np.ascontiguousarray(
+                np.zeros((self.size_vocab, self.num_topics), dtype=np.intc)
+            )
+            self.n_doc = np.ascontiguousarray(
+                np.zeros((self.size_corpus, self.num_topics), dtype=np.intc)
+            )
+            self.n_all = np.ascontiguousarray(
+                np.zeros(self.num_topics, dtype=np.intc)
+            )
             self.assignment_ptr = \
                 new vector[vector[vector[int]]](self.size_vocab)
             for line in file:
@@ -71,20 +75,19 @@ cdef class LDA:
                 occurrences = [(i, next(iterline)) for i in iterline]
                 self.assignment_ptr[0][token].reserve(len(occurrences))
                 for doc, count in occurrences:
-                    random_assignment = np_rng.choice(self.num_topics, count)
-                    rand_topics, rand_counts = np.unique(random_assignment,
-                                                         return_counts=True)
-                    n_token_np[token, rand_topics] += rand_counts
-                    n_doc_np[doc, rand_topics] += rand_counts
-                    n_all_np[rand_topics] += rand_counts
+                    random_assignment = (
+                            self.num_topics * np_rng.random(count)
+                    ).astype(int)
+                    for i in random_assignment:
+                        self.n_token[token, i] += 1
+                        self.n_doc[doc, i] += 1
+                        self.n_all[i] += 1
                     self.assignment_ptr[0][token].push_back(random_assignment)
                     self.assignment_ptr[0][token].back().push_back(doc)
         self.beta_sum = self.size_vocab * self.beta
-        self.n_token = n_token_np
-        self.n_doc = n_doc_np
-        self.n_all = n_all_np
-        self.pmf = np.zeros((self.num_threads, self.num_topics),
-                            dtype=np.double)
+        self.pmf = np.ascontiguousarray(
+            np.empty((self.num_threads, self.num_topics), dtype=np.double)
+        )
         self.omp_locks_ptr = new vector[omp_lock_t](self.num_topics)
         for i in range(self.num_topics):
             omp_init_lock(&(self.omp_locks_ptr[0][i]))
