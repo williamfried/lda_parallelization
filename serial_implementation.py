@@ -1,9 +1,9 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 class LDA:
 
-    def __init__(self, num_topics, alpha=None, beta=None, max_iter=20, random_state=205):
+    def __init__(self, num_topics, alpha=None, beta=None, max_iter=40, random_state=205):
         self.num_topics = num_topics
         self.alpha = alpha if alpha else 1 / num_topics
         self.beta = beta if beta else 1 / num_topics
@@ -39,6 +39,7 @@ class LDA:
         '''Perform LDA inference algorithm as described in paper.'''
 
         self.num_docs = len(doc2word2cnt)
+        self.doc2word2cnt = doc2word2cnt
 
         # number of words assigned to topic z across all documents
         self.topic2cnt = {i: 0 for i in range(self.num_topics)}
@@ -73,6 +74,7 @@ class LDA:
 
         # perform collapsed Gibbs sampling
         iter_num = 0
+        averages_cohs = []
         while iter_num < self.max_iter:
             print(iter_num)
             for doc_id, word2cnt in doc2word2cnt.items():
@@ -102,7 +104,17 @@ class LDA:
                         # increment counts
                         self.update_counts(doc_id, word, new_topic, 'up')
 
+            coherences = self.get_topic_coherence(10)
+            averages_cohs.append(np.mean(coherences))
+
             iter_num += 1
+
+        plt.figure()
+        plt.plot(range(self.max_iter), averages_cohs)
+        plt.xlabel('Number of iteration')
+        plt.ylabel('Average topic coherence')
+        plt.savefig('CoherenceConvergence.png')
+        plt.show()
 
         print(self.topic2cnt)
 
@@ -129,10 +141,10 @@ class LDA:
 
         return matrix
 
-    def get_topic_coherence(self, top_word_num = None):
+    def get_topic_coherence(self, top_word_num = 40):
 
-        if top_word_num == None:
-            top_word_num = self.num_topics
+        #if top_word_num == None:
+        #    top_word_num = self.num_topics
 
         # fist map each word to all the doc ids it appears in
         word2docs = dict()
@@ -159,7 +171,9 @@ class LDA:
                     set_m = set(word2docs[v_m])
                     set_l = set(word2docs[v_l])
                     num = len(word2docs[v_m])+ len(word2docs[v_l]) - len(set_m.union(set_l)) + 1
+                    #print(num)
                     denom = len(word2docs[v_l])
+                    #print(denom)
                     coherence += np.log(num/denom)
 
             coherences.append(coherence)
