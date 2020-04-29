@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
 
 
 class LDA:
@@ -172,10 +171,8 @@ class LDA:
                 if v_m not in word_tracker:
                     word_tracker.add(v_m)
                     v_m_count_lst.append(v_m_count)
-            #for m, v_m in enumerate(top_words_topic[1:]):
                 for v_l in top_words_topic[:m+1]:
                     v_l_count = np.count_nonzero(top_words_all_topics == v_l)
-                # for v_l in top_words_topic[:m+1]:
                     # get co-occurence
                     num = len(word2docs[v_m].intersection(word2docs[v_l])) + 1
                     denom = len(word2docs[v_l]) * v_m_count * v_l_count
