@@ -216,7 +216,6 @@ class LDA:
                         np.random.shuffle(previous_topics)
 
                         for previous_topic in previous_topics:
-
                             # decrement counts
                             self.update_counts(doc_id, word, previous_topic, 'down')
                             w_vec[previous_topic] -= 1

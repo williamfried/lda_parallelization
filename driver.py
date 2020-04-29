@@ -1,6 +1,6 @@
 import json
 import numpy as np
-from mpi_implementation_synchronous import LDA
+from serial_coherence import LDA
 import time
 
 top_word_num = 30
