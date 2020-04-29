@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import sys
 
 
 class LDA:
@@ -17,6 +19,7 @@ class LDA:
         self.doc2topic2cnt = None
         self.num_docs = None
         self.doc2word2topic2cnt = None
+        self.doc2word2cnt = None
 
         np.random.seed(random_state)
 
@@ -39,6 +42,7 @@ class LDA:
         '''Perform LDA inference algorithm as described in paper.'''
 
         self.num_docs = len(doc2word2cnt)
+        self.doc2word2cnt = doc2word2cnt
 
         # number of words assigned to topic z across all documents
         self.topic2cnt = {i: 0 for i in range(self.num_topics)}
@@ -73,6 +77,7 @@ class LDA:
 
         # perform collapsed Gibbs sampling
         iter_num = 0
+        averages_cohs = []
         while iter_num < self.max_iter:
             print(iter_num)
             for doc_id, word2cnt in doc2word2cnt.items():
@@ -102,7 +107,19 @@ class LDA:
                         # increment counts
                         self.update_counts(doc_id, word, new_topic, 'up')
 
+            coherences = self.get_topic_coherence(30)
+            averages_cohs.append(np.mean(coherences))
+
             iter_num += 1
+
+        plt.figure()
+        plt.plot(range(self.max_iter), averages_cohs)
+        plt.xlabel('Number of iteration')
+        plt.ylabel('Average topic coherence')
+        plt.savefig('CoherenceConvergence.png')
+        plt.show()
+
+        # print(self.topic2cnt)
 
     def get_topic_distributions(self):
         '''Calculate word distribution for each topic using methodology described here:
@@ -126,3 +143,50 @@ class LDA:
                                          (topic_assigned_num + self.num_topics * self.alpha))
 
         return matrix
+
+    def get_topic_coherence(self, top_word_num=40):
+
+        #if top_word_num == None:
+        #    top_word_num = self.num_topics
+
+        # fist map each word to all the doc ids it appears in
+
+        word2docs = {word: {doc for doc in range(self.num_docs) if word in self.doc2word2cnt[doc]}
+                     for word in range(self.vocab_size)}
+
+        coherences = []
+        topic_distributions = self.get_topic_distributions()
+        topic_distributions_sorted = np.argsort(-topic_distributions, axis=1)
+        top_words = topic_distributions_sorted[:, :top_word_num]
+
+        top_words_all_topics = top_words.flatten()
+
+        word_tracker = set()
+        v_m_count_lst = []
+        for topic in range(self.num_topics):
+            top_words_topic = top_words[topic, :]
+            coherence = 0
+
+            for m, v_m in enumerate(top_words_topic[1:]):
+                v_m_count = np.count_nonzero(top_words_all_topics == v_m)
+                if v_m not in word_tracker:
+                    word_tracker.add(v_m)
+                    v_m_count_lst.append(v_m_count)
+            #for m, v_m in enumerate(top_words_topic[1:]):
+                for v_l in top_words_topic[:m+1]:
+                    v_l_count = np.count_nonzero(top_words_all_topics == v_l)
+                # for v_l in top_words_topic[:m+1]:
+                    # get co-occurence
+                    num = len(word2docs[v_m].intersection(word2docs[v_l])) + 1
+                    denom = len(word2docs[v_l]) * v_m_count * v_l_count
+                    coherence += np.log(num / denom)
+
+            coherences.append(coherence)
+
+        # normalize by number of top words
+        coherences = [k / top_word_num for k in coherences]
+        print('avg topics:', np.mean(v_m_count_lst))
+        print('Average topic coherence is : {}'.format(np.mean(coherences)))
+        # print('With min and max respectively : {} & {}'.format(np.min(coherences), np.max(coherences)))
+
+        return coherences
