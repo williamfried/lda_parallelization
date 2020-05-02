@@ -3,8 +3,10 @@ import json
 import nltk
 from nltk.corpus import stopwords
 from pyspark import SparkConf, SparkContext
+from pyspark.sql import SparkSession
 import re
 import os
+import boto3
 
 try:
     nltk.corpus.cmudict.dict()
@@ -16,14 +18,45 @@ finally:
 domain_specific_stop_words = {'reference','references'}
 stop_words |= domain_specific_stop_words
 
-conf = SparkConf().setMaster('local[1]').setAppName('logs')
+conf = SparkConf().setAppName('logs')
 sc = SparkContext.getOrCreate(conf=conf)
+
+#sc = SparkSession.builder.appName("Trial").config("spark.sql.warehouse.dir", "s3://project-cs205-pantent-lda").enableHiveSupport().getOrCreate()
 
 min_doc_length = 10
 min_word_occurrences = 5
 min_document_occurrences = 1
 
-directory = 'patent_data'
+# need this function to iterate over bucket items
+def iterate_bucket_items(bucket):
+    """
+    Generator that iterates over all objects in a given s3 bucket
+
+    See http://boto3.readthedocs.io/en/latest/reference/services/s3.html#S3.Client.list_objects_v2
+    for return data format
+    :param bucket: name of s3 bucket
+    :return: dict of metadata for an object
+    """
+
+
+    client = boto3.client('s3')
+    paginator = client.get_paginator('list_objects_v2')
+    page_iterator = paginator.paginate(Bucket=bucket)
+
+    for page in page_iterator:
+        if page['KeyCount'] > 0:
+            for item in page['Contents']:
+                yield item
+
+
+directory = 'patents_partial1/'
+bucket_name = 'project-cs205-pantent-lda'
+
+files = []
+for i in iterate_bucket_items(bucket=bucket_name):
+    file_name = i['Key'][len(directory):]
+    if file_name[-4:] == '.nlp':
+        files.append(file_name)
 
 def get_patent_words(x):
     words = []
@@ -44,8 +77,8 @@ def get_patent_words(x):
                 words.append(word)
     return words
 
-for i, filename in enumerate(os.listdir(directory)):
-    doc = sc.textFile(directory + '/' + filename).map(get_patent_words)
+for i, filename in enumerate(files):
+    doc = sc.textFile('s3://'+ bucket_name + '/' + directory + filename).map(get_patent_words)
     doc = doc.map(lambda word: ('doc'+str(i), word))
     doc = doc.reduceByKey(lambda a,b: a+b)
     if i == 0:
@@ -55,6 +88,7 @@ for i, filename in enumerate(os.listdir(directory)):
     
 documents_counts = documents_counts.map(lambda tup: Counter(tup[1]).most_common())
 
+print('HAAAAALOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
 # get words that occur at least 'min_word_occurrences' times throughout all documents and occur in at least
 # 'min_document_occurrences' different documents
 words_in_vocab = (documents_counts.flatMap(lambda doc: [(key, (value, 1)) for key, value in doc])
@@ -76,10 +110,10 @@ doc_id2counts = {i: count_dict for i, count_dict in enumerate(document_counts_nu
 # 1. word2num to reverse the dictionary and recover the words corresponding to each integer after LDA is performed
 # 2. doc_id2counts
 
-with open('word2num_patents.txt', 'w') as f:
+with open('s3://' + bucket_name + '/' + 'word2num_patents.txt', 'w') as f:
     f.write(json.dumps(word2num))
 
-with open('doc_id2counts_patents.txt', 'w') as f:
+with open('s3://' + bucket_name + '/' + 'doc_id2counts_patents.txt', 'w') as f:
     f.write(json.dumps(doc_id2counts))
 
-documents_counts.saveAsTextFile("DocumentsCounts.txt")
+#documents_counts.saveAsTextFile("DocumentsCounts.txt")
