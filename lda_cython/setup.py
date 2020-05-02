@@ -8,8 +8,18 @@ ext_modules = [
         "sampler", ["sampler.pyx"],
     ),
     Extension(
-        "serial_cgs_cython", ["serial_cgs_cython.pyx"],
-        extra_compile_args=['-fopenmp'], extra_link_args=['-fopenmp'],
+        "cgs", ["cgs.pyx"],
+        extra_compile_args=[
+            "-fopenmp",
+            # Note these args are for MPI, unknown if specific to system
+            "-Wl,-flat_namespace", "-Wl,-commons,use_dylibs"
+        ], extra_link_args=[
+            "-fopenmp",
+            # Note these args are for MPI, likely specific to system
+            # as well as implementation of MPI
+            "-I/usr/local/Cellar/mpich/3.3.2/include",
+            "-L/usr/local/Cellar/mpich/3.3.2/lib", "-lmpi", "-lpmpi"
+        ],
     )
 ]
 setup(
