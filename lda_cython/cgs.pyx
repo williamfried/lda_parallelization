@@ -13,7 +13,6 @@ from cython.parallel cimport prange
 # from mpi4py import MPI  # Python import
 # from mpi4py cimport MPI  # types for above python import
 from mpi4py cimport libmpi as mpi  # C API
-import os.path
 from libc.stdlib cimport malloc, calloc, free
 
 
@@ -57,16 +56,24 @@ cdef class LDA:
     cdef double[:, ::1] pmf
 
 
-    def __cinit__(self, dir_path, num_topics, alpha, beta, num_threads=1,
-                  seed=205):
+    def __cinit__(self, file_path, num_topics, alpha, beta, size_vocab,
+                  size_corpus, num_threads=1, seed=205):
         cdef int i
         self.num_topics = num_topics
         self.alpha = alpha
         self.beta = beta
+        self.size_vocab = size_vocab
+        self.size_corpus = size_corpus
         self.num_threads = num_threads
         self.mpi_comm = mpi.MPI_COMM_WORLD
         mpi.MPI_Comm_size(self.mpi_comm, &self.mpi_size)
         mpi.MPI_Comm_rank(self.mpi_comm, &self.mpi_rank)
+        self.beta_sum = self.size_vocab * self.beta
+        self.current_tokens = (
+            self.size_vocab * self.mpi_rank // self.mpi_size,
+            self.size_vocab * (self.mpi_rank + 1) // self.mpi_size,
+            self.mpi_rank
+        )
 
         # Set random seed
         seed_sequence = SeedSequence(seed).spawn(self.mpi_size)[self.mpi_rank]
@@ -82,30 +89,29 @@ cdef class LDA:
                 )
             )
 
+        cdef int[:, ::1] temp_n_token
+        temp_n_token = np.ascontiguousarray(
+                np.zeros((self.size_vocab, self.num_topics), dtype=np.intc)
+        )
+        # Last row may or may not be used; the first
+        # {self.current_tokens[1] - self.current_tokens[0]} rows are valid
+        self.n_token = np.ascontiguousarray(
+            np.zeros(((self.size_vocab + self.mpi_size - 1) // self.mpi_size,
+                      self.num_topics), dtype=np.intc)
+        )
+        self.n_doc = np.ascontiguousarray(
+            np.zeros((self.size_corpus, self.num_topics), dtype=np.intc)
+        )
+        self.n_all = np.ascontiguousarray(
+            np.zeros(self.num_topics, dtype=np.intc)
+        )
+        self.assignment_ptr = \
+            new vector[vector[vector[int]]](self.size_vocab)
+
         cdef int token, doc, count
         cdef str line
         cdef list line_split, occurrences
-        cdef int[::1] temp_n_all
-        cdef int[:, ::1] temp_n_token
-        with open(
-                os.path.join(dir_path, "part-{:05}".format(self.mpi_rank))
-        ) as file:
-            # Perhaps reading from the header is not a good idea
-            # because it is not naturally output from Spark
-            line_split = file.readline().strip().split(",")
-            self.size_vocab = int(line_split[0])
-            self.size_corpus = int(line_split[1])
-            temp_n_token = np.ascontiguousarray(
-                np.zeros((self.size_vocab, self.num_topics), dtype=np.intc)
-            )
-            self.n_doc = np.ascontiguousarray(
-                np.zeros((self.size_corpus, self.num_topics), dtype=np.intc)
-            )
-            self.n_all = np.ascontiguousarray(
-                np.zeros(self.num_topics, dtype=np.intc)
-            )
-            self.assignment_ptr = \
-                new vector[vector[vector[int]]](self.size_vocab)
+        with open(file_path) as file:
             # Randomly initialize assignments and record assignments
             for doc, line in enumerate(file):
                 line_split = line.strip().split(",")
@@ -121,18 +127,6 @@ cdef class LDA:
                         self.n_all[i] += 1
                     self.assignment_ptr[0][token].push_back(random_assignment)
                     self.assignment_ptr[0][token].back().push_back(doc)
-        self.beta_sum = self.size_vocab * self.beta
-        self.current_tokens = (
-            self.size_vocab * self.mpi_rank // self.mpi_size,
-            self.size_vocab * (self.mpi_rank + 1) // self.mpi_size,
-            self.mpi_rank
-        )
-        # Last row may or may not be used; the first
-        # {self.current_tokens[1] - self.current_tokens[0]} rows are valid
-        self.n_token = np.ascontiguousarray(
-            np.zeros(((self.size_vocab + self.mpi_size - 1) // self.mpi_size,
-                      self.num_topics), dtype=np.intc)
-        )
         # Add up the {self.n_all} from the random assignments across nodes
         mpi.MPI_Allreduce(mpi.MPI_IN_PLACE, <void *> &self.n_all[0],
                           self.num_topics, mpi.MPI_INT, mpi.MPI_SUM,

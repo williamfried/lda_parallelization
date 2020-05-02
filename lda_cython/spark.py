@@ -1,5 +1,5 @@
 from collections import Counter
-import json
+import csv
 import nltk
 from nltk.corpus import stopwords
 from pyspark import SparkConf, SparkContext
@@ -76,7 +76,8 @@ doc_id2counts = document_counts_numerical.zipWithIndex().map(
 #    each integer after LDA is performed
 # 2. doc_id2counts
 
-with open('word2num.txt', 'w') as f:
-    f.write(json.dumps(word2num))
+with open('word2num.csv', 'w') as f:
+    writer = csv.writer(f)
+    writer.writerows(word2num.items())
 
 doc_id2counts.coalesce(num_output_files).saveAsTextFile("output")
