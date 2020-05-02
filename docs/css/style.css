@@ -1,0 +1,105 @@
+/*!
+ * Start Bootstrap - Scrolling Nav (https://startbootstrap.com/template-overviews/scrolling-nav)
+ * Copyright 2013-2019 Start Bootstrap
+ * Licensed under MIT (https://github.com/BlackrockDigital/startbootstrap-scrolling-nav/blob/master/LICENSE)
+ */
+
+body {
+   font-family: 'Raleway', sans-serif;
+   font-weight: 200;
+}
+
+
+/* THESE ARE CLASSES INCLUDED WITH BOOTSTRAP THAT WE'LL AMEND */
+
+.bg-dark {
+  background: black !important;
+}
+
+.nav-link {
+  font-size: 14px;
+  margin-left: 20px;
+}
+
+.navbar-brand {
+  font-size: 16px;
+}
+
+
+/* THESE ARE ATTRIBUTES THAT WE'RE DEFINING */
+
+
+
+
+header {
+  color: white;
+  padding-top: 40vh;
+  padding-bottom: 40vh;
+}
+
+section {
+  padding: 20px;
+}
+
+.header_background {
+  color: white;
+  font-family: 'Raleway', sans-serif;
+  vertical-align: center;
+  background: url('../images/dirichlet_triangles_dark.png');
+  background-size: 100%;
+  background-color: white;
+}
+
+
+.title_text {
+  font-weight: 800;
+  font-size: 5vw;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.subtitle_text {
+  padding-top: 20px;
+  font-size: 2vw;
+  font-weight: 100;
+  color: rgba(255,255,255,.85);
+
+  font-family: 'Raleway', sans-serif;
+  font-weight: 100;
+}
+
+.footer_text {
+  color: black;
+  font-size: 14px;
+}
+
+.section_paragraph {
+  font-size: 15px;
+}
+
+.diagram {
+  justify: center;
+  max-width: 80%;
+}
+
+
+/* SOME MEDIA QUERIES TO MAKE IT RESPONSIVE BABY */
+@media only screen and (max-width: 600px) {
+  .title_text {
+    font-weight: 800;
+    font-size: 10vw;
+    justify-content: center;
+    max-width: 100%;
+  }
+
+  .subtitle_text {
+    padding-top: 20px;
+    font-size: 5vw;
+    font-weight: 100;
+    color: rgba(255,255,255,.85);
+
+    font-family: 'Raleway', sans-serif;
+    font-weight: 100;
+
+  }
+}
