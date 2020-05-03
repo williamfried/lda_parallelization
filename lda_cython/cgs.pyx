@@ -1,19 +1,23 @@
 # cython: language_level=3
-# distutils: language = c++
+# distutils: language=c++
 cimport cython
 import numpy as np
 from libcpp.vector cimport vector
-from sampler cimport categorical_sample
+from utils cimport categorical_sample, partial_merge_loc
 from numpy.random import PCG64, SeedSequence
 from numpy.random cimport bitgen_t
 from cpython.pycapsule cimport PyCapsule_GetPointer
-from openmp cimport omp_lock_t, omp_get_num_threads, omp_get_thread_num, \
-    omp_init_lock, omp_destroy_lock, omp_set_lock, omp_unset_lock
+# from openmp cimport omp_lock_t, omp_get_num_threads, omp_get_thread_num, \
+#     omp_init_lock, omp_destroy_lock, omp_set_lock, omp_unset_lock
 from cython.parallel cimport prange
 # from mpi4py import MPI  # Python import
 # from mpi4py cimport MPI  # types for above python import
 from mpi4py cimport libmpi as mpi  # C API
 from libc.stdlib cimport malloc, calloc, free
+
+
+cdef int omp_get_thread_num() nogil:
+    return 0
 
 
 # Indicates that LDA is not subclassed;
@@ -28,7 +32,9 @@ cdef class LDA:
     cdef readonly int size_vocab, size_corpus, num_topics
     # Note these two could be represented as maps or unordered_maps
     # {n_token[token_index][topic]} contains corresponding counts
-    cdef readonly int[:, ::1] n_token,
+    # Last row may or may not be used; the first
+    # {self.current_tokens[1] - self.current_tokens[0]} rows are valid
+    cdef readonly int[:, ::1] n_token
     # {(start, stop, split_num)} that denote the rows of n_token
     # such that {token == token_index + start}
     # Should always be the case that
@@ -46,15 +52,13 @@ cdef class LDA:
     cdef list rand_gens
     cdef vector[bitgen_t *] *bitgen_states_ptr
     # Vector of locks, each corresponding to a topic
-    cdef vector[omp_lock_t] *omp_locks_ptr
+    # cdef vector[omp_lock_t] *omp_locks_ptr
     cdef mpi.MPI_Comm mpi_comm
     cdef int mpi_size
     cdef int mpi_rank
-
     # Defined just to allocate the memory in the init;
     # would otherwise require lots of mallocs and frees of same size
     cdef double[:, ::1] pmf
-
 
     def __cinit__(self, file_path, num_topics, alpha, beta, size_vocab,
                   size_corpus, num_threads=1, seed=205):
@@ -90,21 +94,16 @@ cdef class LDA:
             )
 
         cdef int[:, ::1] temp_n_token
-        temp_n_token = np.ascontiguousarray(
-                np.zeros((self.size_vocab, self.num_topics), dtype=np.intc)
-        )
+        temp_n_token = np.zeros((self.size_vocab, self.num_topics),
+                                dtype=np.intc)
         # Last row may or may not be used; the first
         # {self.current_tokens[1] - self.current_tokens[0]} rows are valid
-        self.n_token = np.ascontiguousarray(
-            np.zeros(((self.size_vocab + self.mpi_size - 1) // self.mpi_size,
-                      self.num_topics), dtype=np.intc)
-        )
-        self.n_doc = np.ascontiguousarray(
-            np.zeros((self.size_corpus, self.num_topics), dtype=np.intc)
-        )
-        self.n_all = np.ascontiguousarray(
-            np.zeros(self.num_topics, dtype=np.intc)
-        )
+        self.n_token = np.zeros(((self.size_vocab + self.mpi_size - 1)
+                                 // self.mpi_size, self.num_topics),
+                                dtype=np.intc)
+        self.n_doc = np.zeros((self.size_corpus, self.num_topics),
+                              dtype=np.intc)
+        self.n_all = np.zeros(self.num_topics, dtype=np.intc)
         self.assignment_ptr = \
             new vector[vector[vector[int]]](self.size_vocab)
 
@@ -149,14 +148,12 @@ cdef class LDA:
         # Just allocating memory here so it doesn't need to be done later
         # may be not necessary; certainly not all that clean, but saves
         # repeated {malloc}s and {free}s
-        self.pmf = np.ascontiguousarray(
-            np.empty((self.num_threads, self.num_topics), dtype=np.double)
-        )
+        self.pmf = np.empty((self.num_threads, self.num_topics),
+                            dtype=np.double)
         # Initialize the OMP locks, one per topic
-        self.omp_locks_ptr = new vector[omp_lock_t](self.num_topics)
-        for i in range(self.num_topics):
-            omp_init_lock(&(self.omp_locks_ptr[0][i]))
-
+        # self.omp_locks_ptr = new vector[omp_lock_t](self.num_topics)
+        # for i in range(self.num_topics):
+        #     omp_init_lock(&(self.omp_locks_ptr[0][i]))
 
     cpdef void sample(self, int num_iterations=1) nogil:
         """Run num_iterations epochs of CGS"""
@@ -188,10 +185,10 @@ cdef class LDA:
                     ):
                         old_topic = self.assignment_ptr[0][token][doc_index][j]
                         self.n_token[token_index, old_topic] -= 1
-                        omp_set_lock(&(self.omp_locks_ptr[0][old_topic]))
+                        # omp_set_lock(&(self.omp_locks_ptr[0][old_topic]))
                         self.n_doc[document, old_topic] -=1
                         n_all_upd[old_topic] -= 1
-                        omp_unset_lock(&(self.omp_locks_ptr[0][old_topic]))
+                        # omp_unset_lock(&(self.omp_locks_ptr[0][old_topic]))
                         self.pmf[omp_get_thread_num(), old_topic] = (
                             (self.n_doc[document, old_topic] + self.alpha)
                             * (self.n_token[token_index, old_topic]
@@ -207,10 +204,10 @@ cdef class LDA:
 
                         self.assignment_ptr[0][token][doc_index][j] = new_topic
                         self.n_token[token_index, new_topic] += 1
-                        omp_set_lock(&(self.omp_locks_ptr[0][new_topic]))
+                        # omp_set_lock(&(self.omp_locks_ptr[0][new_topic]))
                         self.n_doc[document, new_topic] += 1
                         n_all_upd[new_topic] += 1
-                        omp_unset_lock(&(self.omp_locks_ptr[0][new_topic]))
+                        # omp_unset_lock(&(self.omp_locks_ptr[0][new_topic]))
                         self.pmf[omp_get_thread_num(), new_topic] = (
                             (self.n_doc[document, new_topic] + self.alpha)
                             * (self.n_token[token_index, new_topic]
@@ -246,27 +243,113 @@ cdef class LDA:
         Posterior distribution over tokens for each topic such that
         output[i, j] = Pr[token j | topic i]
         """
-        # output = np.asarray(self.n_token)
-        # output = output + self.beta
-        # output = (output / np.sum(output, axis=0)).T
-        # return output
-        pass
+        output = np.asarray(self.n_token)[:(self.current_tokens[1]
+                                            - self.current_tokens[0])]
+        output = output + self.beta
+        cdef double[::1] sum_arr = np.sum(output, axis=0)
+        mpi.MPI_Allreduce(mpi.MPI_IN_PLACE, <void *> &sum_arr[0],
+                          self.num_topics, mpi.MPI_INT, mpi.MPI_SUM,
+                          self.mpi_comm)
+        output = (output / np.asarray(sum_arr)).T
+        return output
 
     def get_document_distributions(self):
         """
         Posterior distribution over topics for each document such that
         output[i, j] = Pr[topic j | document i]
         """
-        # output = np.asarray(self.n_doc)
-        # output = output + self.alpha
-        # output = (output.T / np.sum(output, axis=1)).T
-        # return output
-        pass
+        output = np.asarray(self.n_doc)
+        output = output + self.alpha
+        output = (output.T / np.sum(output, axis=1)).T
+        return output
+
+    def get_topic_coherence(self, top_word_num=40):
+        # Get top words of each topic
+        top_words = self.get_top_tokens(top_word_num)[:, :, 1]
+        token_appearances = {
+            token.item() : {vec.back()
+                            for vec in self.assignment_ptr[0][token]}
+            for token in np.nditer(top_words)
+        }
+        cdef int num_pairs = (top_word_num * (top_word_num - 1)) // 2
+        cdef int[:, ::1] local_co_occur = np.empty(
+            (self.num_topics, num_pairs), dtype=np.intc
+        )
+        # This may repeat entries, but much easier than reducing dicts
+        cdef int[:, ::1] local_occur = np.empty(
+            (self.num_topics, top_word_num), dtype=np.intc
+        )
+        cdef int i, j, k
+        cdef int l
+        for i in range(self.num_topics):
+            j = 0
+            for m in range(top_word_num):
+                local_occur[i, m] = len(token_appearances[top_words[i, m]])
+            for m in range(1, top_word_num):
+                for l in range(m):
+                    local_co_occur[i, j] = len(
+                        token_appearances[top_words[i, m]]
+                        & token_appearances[top_words[i, l]]
+                    )
+                    j += 1
+        if self.mpi_rank != 0:
+            mpi.MPI_Reduce(&local_co_occur[0, 0], NULL,
+                           self.num_topics * num_pairs, mpi.MPI_INT,
+                           mpi.MPI_SUM, 0, self.mpi_comm)
+            mpi.MPI_Reduce(&local_occur[0, 0], NULL,
+                           self.num_topics * top_word_num, mpi.MPI_INT,
+                           mpi.MPI_SUM, 0, self.mpi_comm)
+        else:
+            mpi.MPI_Reduce(mpi.MPI_IN_PLACE, &local_co_occur[0, 0],
+                           self.num_topics * num_pairs, mpi.MPI_INT,
+                           mpi.MPI_SUM, 0, self.mpi_comm)
+            mpi.MPI_Reduce(mpi.MPI_IN_PLACE, &local_occur[0, 0],
+                           self.num_topics * top_word_num, mpi.MPI_INT,
+                           mpi.MPI_SUM, 0, self.mpi_comm)
+            topic_coherence = np.sum(
+                np.log(np.asarray(local_co_occur) + 1), axis=1
+            )
+            # I don't understand why this is so unsymmetric
+            topic_coherence -= np.sum(
+                np.log(local_occur) * np.arange(top_word_num - 1, -1, -1),
+                axis=1
+            )
+            return topic_coherence
+
+
+    def get_top_tokens(self, num_tokens):
+        if num_tokens * self.mpi_size > self.size_vocab:
+            raise ValueError("Too many words; try get_topic_distributions")
+        n_token_arr = np.asarray(self.n_token[:(self.current_tokens[1]
+                                                - self.current_tokens[0])],
+                                 dtype=np.intc)
+        local_top_id = np.argsort(-n_token_arr, axis=0)[:num_tokens]
+        local_top_val = n_token_arr[local_top_id,
+                                    np.arange(n_token_arr.shape[1])]
+        cdef int[:, :, ::1] local_top = np.ascontiguousarray(np.stack(
+            (local_top_val.T, local_top_id.T.astype(np.intc)), axis=-1
+        ))
+        cdef int[:, :, ::1] global_top = np.empty_like(local_top)
+        cdef mpi.MPI_Datatype sort_index_type
+        # Perhaps more easily understood as
+        # mpi.MPI_Type_contiguous(num_words, mpi.MPI_2INT, &sort_index_type)
+        mpi.MPI_Type_contiguous(num_tokens * 2, mpi.MPI_INT, &sort_index_type)
+        mpi.MPI_Type_commit(&sort_index_type)
+        cdef mpi.MPI_Op Partial_merge_loc
+        mpi.MPI_Op_create(<mpi.MPI_User_function *> partial_merge_loc, True,
+                          &Partial_merge_loc)
+        mpi.MPI_Allreduce(<void *> &local_top[0, 0, 0],
+                          <void *> &global_top[0, 0, 0],
+                          self.num_topics, sort_index_type,
+                          Partial_merge_loc, self.mpi_comm)
+        mpi.MPI_Type_free(&sort_index_type)
+        mpi.MPI_Op_free(&Partial_merge_loc)
+        return np.asarray(global_top)
 
     def __dealloc__(self):
         del self.assignment_ptr
         del self.bitgen_states_ptr
-        cdef int i
-        for i in range(self.num_topics):
-            omp_destroy_lock(&(self.omp_locks_ptr[0][i]))
-        del self.omp_locks_ptr
+        # cdef int i
+        # for i in range(self.num_topics):
+        #     omp_destroy_lock(&(self.omp_locks_ptr[0][i]))
+        # del self.omp_locks_ptr

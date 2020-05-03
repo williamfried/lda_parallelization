@@ -5,12 +5,12 @@ import numpy as np
 np_path = np.get_include()
 ext_modules = [
     Extension(
-        "sampler", ["sampler.pyx"],
+        "utils", ["utils.pyx"],
     ),
     Extension(
         "cgs", ["cgs.pyx"],
         extra_compile_args=[
-            "-fopenmp",
+            # "-fopenmp",
             # Note these args are for MPI, unknown if specific to system
             # To replace manually,  see
             # https://www.open-mpi.org/doc/v3.0/man1/mpicc.1.php
@@ -18,7 +18,7 @@ ext_modules = [
             # and show args
             "-Wl,-flat_namespace", "-Wl,-commons,use_dylibs"
         ], extra_link_args=[
-            "-fopenmp",
+            # "-fopenmp",
             # Note these args are for MPI, likely specific to system
             # as well as implementation of MPI
             # To replace these manually, see note above
