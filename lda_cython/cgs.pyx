@@ -7,17 +7,13 @@ from utils cimport categorical_sample, partial_merge_loc
 from numpy.random import PCG64, SeedSequence
 from numpy.random cimport bitgen_t
 from cpython.pycapsule cimport PyCapsule_GetPointer
-# from openmp cimport omp_lock_t, omp_get_num_threads, omp_get_thread_num, \
-#     omp_init_lock, omp_destroy_lock, omp_set_lock, omp_unset_lock
+from openmp cimport omp_lock_t, omp_get_num_threads, omp_get_thread_num, \
+    omp_init_lock, omp_destroy_lock, omp_set_lock, omp_unset_lock
 from cython.parallel cimport prange
 # from mpi4py import MPI  # Python import
 # from mpi4py cimport MPI  # types for above python import
 from mpi4py cimport libmpi as mpi  # C API
 from libc.stdlib cimport malloc, calloc, free
-
-
-cdef int omp_get_thread_num() nogil:
-    return 0
 
 
 # Indicates that LDA is not subclassed;
@@ -52,7 +48,7 @@ cdef class LDA:
     cdef list rand_gens
     cdef vector[bitgen_t *] *bitgen_states_ptr
     # Vector of locks, each corresponding to a topic
-    # cdef vector[omp_lock_t] *omp_locks_ptr
+    cdef vector[omp_lock_t] *omp_locks_ptr
     cdef mpi.MPI_Comm mpi_comm
     cdef int mpi_size
     cdef int mpi_rank
@@ -151,9 +147,9 @@ cdef class LDA:
         self.pmf = np.empty((self.num_threads, self.num_topics),
                             dtype=np.double)
         # Initialize the OMP locks, one per topic
-        # self.omp_locks_ptr = new vector[omp_lock_t](self.num_topics)
-        # for i in range(self.num_topics):
-        #     omp_init_lock(&(self.omp_locks_ptr[0][i]))
+        self.omp_locks_ptr = new vector[omp_lock_t](self.num_topics)
+        for i in range(self.num_topics):
+            omp_init_lock(&(self.omp_locks_ptr[0][i]))
 
     cpdef void sample(self, int num_iterations=1) nogil:
         """Run num_iterations epochs of CGS"""
@@ -185,10 +181,10 @@ cdef class LDA:
                     ):
                         old_topic = self.assignment_ptr[0][token][doc_index][j]
                         self.n_token[token_index, old_topic] -= 1
-                        # omp_set_lock(&(self.omp_locks_ptr[0][old_topic]))
+                        omp_set_lock(&(self.omp_locks_ptr[0][old_topic]))
                         self.n_doc[document, old_topic] -=1
                         n_all_upd[old_topic] -= 1
-                        # omp_unset_lock(&(self.omp_locks_ptr[0][old_topic]))
+                        omp_unset_lock(&(self.omp_locks_ptr[0][old_topic]))
                         self.pmf[omp_get_thread_num(), old_topic] = (
                             (self.n_doc[document, old_topic] + self.alpha)
                             * (self.n_token[token_index, old_topic]
@@ -204,10 +200,10 @@ cdef class LDA:
 
                         self.assignment_ptr[0][token][doc_index][j] = new_topic
                         self.n_token[token_index, new_topic] += 1
-                        # omp_set_lock(&(self.omp_locks_ptr[0][new_topic]))
+                        omp_set_lock(&(self.omp_locks_ptr[0][new_topic]))
                         self.n_doc[document, new_topic] += 1
                         n_all_upd[new_topic] += 1
-                        # omp_unset_lock(&(self.omp_locks_ptr[0][new_topic]))
+                        omp_unset_lock(&(self.omp_locks_ptr[0][new_topic]))
                         self.pmf[omp_get_thread_num(), new_topic] = (
                             (self.n_doc[document, new_topic] + self.alpha)
                             * (self.n_token[token_index, new_topic]
@@ -317,13 +313,13 @@ cdef class LDA:
             return topic_coherence
 
 
-    def get_top_tokens(self, num_tokens):
-        if num_tokens * self.mpi_size > self.size_vocab:
+    def get_top_tokens(self, num_top_words):
+        if num_top_words * self.mpi_size > self.size_vocab:
             raise ValueError("Too many words; try get_topic_distributions")
         n_token_arr = np.asarray(self.n_token[:(self.current_tokens[1]
                                                 - self.current_tokens[0])],
                                  dtype=np.intc)
-        local_top_id = np.argsort(-n_token_arr, axis=0)[:num_tokens]
+        local_top_id = np.argsort(-n_token_arr, axis=0)[:num_top_words]
         local_top_val = n_token_arr[local_top_id,
                                     np.arange(n_token_arr.shape[1])]
         cdef int[:, :, ::1] local_top = np.ascontiguousarray(np.stack(
@@ -333,7 +329,8 @@ cdef class LDA:
         cdef mpi.MPI_Datatype sort_index_type
         # Perhaps more easily understood as
         # mpi.MPI_Type_contiguous(num_words, mpi.MPI_2INT, &sort_index_type)
-        mpi.MPI_Type_contiguous(num_tokens * 2, mpi.MPI_INT, &sort_index_type)
+        mpi.MPI_Type_contiguous(num_top_words * 2, mpi.MPI_INT,
+                                &sort_index_type)
         mpi.MPI_Type_commit(&sort_index_type)
         cdef mpi.MPI_Op Partial_merge_loc
         mpi.MPI_Op_create(<mpi.MPI_User_function *> partial_merge_loc, True,
@@ -349,7 +346,7 @@ cdef class LDA:
     def __dealloc__(self):
         del self.assignment_ptr
         del self.bitgen_states_ptr
-        # cdef int i
-        # for i in range(self.num_topics):
-        #     omp_destroy_lock(&(self.omp_locks_ptr[0][i]))
-        # del self.omp_locks_ptr
+        cdef int i
+        for i in range(self.num_topics):
+            omp_destroy_lock(&(self.omp_locks_ptr[0][i]))
+        del self.omp_locks_ptr

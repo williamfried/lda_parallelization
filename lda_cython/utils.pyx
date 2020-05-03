@@ -43,11 +43,6 @@ cdef void partial_merge_loc(int *invec, int *inoutvec, int *len,
     cdef int i, j
     cdef int *r_arr, *w_arr
     cdef int r_idx, w_idx
-    # for i in range(0, len[0], 2):
-    #     r_arr = &invec[i * num_entries * 2]
-    #     w_arr = &inoutvec[i * num_entries * 2]
-    #     for j in range(num_entries):
-    #         w_arr[j * 2] = 0
     for i in range(len[0]):
         r_arr = &invec[i * num_entries * 2]
         w_arr = &inoutvec[i * num_entries * 2]
@@ -61,7 +56,7 @@ cdef void partial_merge_loc(int *invec, int *inoutvec, int *len,
         r_idx -=1
         w_idx -=1
         for j in range(num_entries - 1, -1, -1):
-            if w_idx < 0 and r_idx >= 0 or r_arr[r_idx * 2] < w_arr[w_idx * 2]:
+            if w_idx < 0 or r_idx >= 0 and r_arr[r_idx * 2] < w_arr[w_idx * 2]:
                 w_arr[j * 2] = r_arr[r_idx * 2]
                 w_arr[j * 2 + 1] = r_arr[r_idx * 2 + 1]
                 r_idx -= 1

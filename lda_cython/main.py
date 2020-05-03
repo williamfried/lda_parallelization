@@ -3,6 +3,7 @@ import os.path
 from mpi4py import MPI
 import subprocess
 import numpy as np
+
 docs_dir = "output"
 dictionary_file = "word2num.csv"
 
