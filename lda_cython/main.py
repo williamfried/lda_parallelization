@@ -8,10 +8,13 @@ docs_dir = "output"
 dictionary_file = "word2num.csv"
 
 rank = MPI.COMM_WORLD.Get_rank()
+# Assuming Spark naming convention
 docs_file = os.path.join(docs_dir,
                          "part-{:05}".format(rank))
+# Count number of lines
 num_docs = int(subprocess.run(["wc", "-l", docs_file],
                               capture_output=True).stdout.split()[0])
+# Count number of lines
 num_tokens = int(subprocess.run(["wc", "-l", dictionary_file],
                                 capture_output=True).stdout.split()[0])
 lda_obj = LDA(docs_file, 10, 0.1, 0.1, num_tokens, num_docs)

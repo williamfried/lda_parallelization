@@ -259,29 +259,38 @@ cdef class LDA:
         output = (output.T / np.sum(output, axis=1)).T
         return output
 
-    def get_topic_coherence(self, top_word_num=40):
+    def get_topic_coherence(self, num_top_tokens=40):
+        """
+        Get topic coherence, inspired by Optimizing Semantic Coherence
+        in Topic Models (Minmo et al.) but with adjustments.
+        Only the master node returns a value, but must be run by all nodes
+        """
         # Get top words of each topic
-        top_words = self.get_top_tokens(top_word_num)[:, :, 1]
+        top_words = self.get_top_tokens(num_top_tokens)[:, :, 1]
         token_appearances = {
             token.item() : {vec.back()
                             for vec in self.assignment_ptr[0][token]}
             for token in np.nditer(top_words)
         }
-        cdef int num_pairs = (top_word_num * (top_word_num - 1)) // 2
+        token_top_appearances = dict(zip(*np.unique(top_words,
+                                                    return_counts=True)))
+        cdef int num_pairs = (num_top_tokens * (num_top_tokens - 1)) // 2
         cdef int[:, ::1] local_co_occur = np.empty(
             (self.num_topics, num_pairs), dtype=np.intc
         )
-        # This may repeat entries, but much easier than reducing dicts
+        # This may repeat entries, but much easier than reducing dicts.
+        # Perhaps take advantage of {np.unique(top_words)}
         cdef int[:, ::1] local_occur = np.empty(
-            (self.num_topics, top_word_num), dtype=np.intc
+            (self.num_topics, num_top_tokens), dtype=np.intc
         )
-        cdef int i, j, k
-        cdef int l
+        cdef int i, j, k, l
         for i in range(self.num_topics):
             j = 0
-            for m in range(top_word_num):
+            for m in range(num_top_tokens):
                 local_occur[i, m] = len(token_appearances[top_words[i, m]])
-            for m in range(1, top_word_num):
+            # This indexing order is slightly hard to follow; kept because
+            # of original source
+            for m in range(1, num_top_tokens):
                 for l in range(m):
                     local_co_occur[i, j] = len(
                         token_appearances[top_words[i, m]]
@@ -293,35 +302,56 @@ cdef class LDA:
                            self.num_topics * num_pairs, mpi.MPI_INT,
                            mpi.MPI_SUM, 0, self.mpi_comm)
             mpi.MPI_Reduce(&local_occur[0, 0], NULL,
-                           self.num_topics * top_word_num, mpi.MPI_INT,
+                           self.num_topics * num_top_tokens, mpi.MPI_INT,
                            mpi.MPI_SUM, 0, self.mpi_comm)
         else:
             mpi.MPI_Reduce(mpi.MPI_IN_PLACE, &local_co_occur[0, 0],
                            self.num_topics * num_pairs, mpi.MPI_INT,
                            mpi.MPI_SUM, 0, self.mpi_comm)
             mpi.MPI_Reduce(mpi.MPI_IN_PLACE, &local_occur[0, 0],
-                           self.num_topics * top_word_num, mpi.MPI_INT,
+                           self.num_topics * num_top_tokens, mpi.MPI_INT,
                            mpi.MPI_SUM, 0, self.mpi_comm)
+            topic_coherence = np.log(np.asarray(local_co_occur) + 1)
+            # Decrease the weight of words found across different topics
+            # which are also likely to be common words
+            for i in range(self.num_topics):
+                j = 0
+                for m in range(1, num_top_tokens):
+                    for l in range(m):
+                        topic_coherence -= np.log(
+                            token_top_appearances[top_words[i, m]]
+                            * token_top_appearances[top_words[i, l]]
+                        )
+                        j += 1
             topic_coherence = np.sum(
-                np.log(np.asarray(local_co_occur) + 1), axis=1
+                topic_coherence, axis=1
             )
             # I don't understand why this is so unsymmetric
             topic_coherence -= np.sum(
-                np.log(local_occur) * np.arange(top_word_num - 1, -1, -1),
+                np.log(local_occur) * np.arange(num_top_tokens - 1, -1, -1),
                 axis=1
             )
+            # Perhaps it should be this instead
+            # topic_coherence -= np.sum(np.log(local_occur), axis=1)
             return topic_coherence
 
 
-    def get_top_tokens(self, num_top_words):
-        if num_top_words * self.mpi_size > self.size_vocab:
+    def get_top_tokens(self, num_top_tokens):
+        """
+        Returns the most common tokens of each topic along with their counts.
+        {global_top[i, j, 1]} is the {j}th most common token in topic {i}
+        and {global_top[i, j, 0]} is the corresponding count.
+        """
+        if num_top_tokens * self.mpi_size > self.size_vocab:
             raise ValueError("Too many words; try get_topic_distributions")
         n_token_arr = np.asarray(self.n_token[:(self.current_tokens[1]
                                                 - self.current_tokens[0])],
                                  dtype=np.intc)
-        local_top_id = np.argsort(-n_token_arr, axis=0)[:num_top_words]
+        local_top_id = np.argsort(-n_token_arr, axis=0)[:num_top_tokens]
         local_top_val = n_token_arr[local_top_id,
                                     np.arange(n_token_arr.shape[1])]
+        # This assignment can probably be optimized along with the assignment
+        # of {local_top_val}
         cdef int[:, :, ::1] local_top = np.ascontiguousarray(np.stack(
             (local_top_val.T, local_top_id.T.astype(np.intc)), axis=-1
         ))
@@ -329,7 +359,7 @@ cdef class LDA:
         cdef mpi.MPI_Datatype sort_index_type
         # Perhaps more easily understood as
         # mpi.MPI_Type_contiguous(num_words, mpi.MPI_2INT, &sort_index_type)
-        mpi.MPI_Type_contiguous(num_top_words * 2, mpi.MPI_INT,
+        mpi.MPI_Type_contiguous(num_top_tokens * 2, mpi.MPI_INT,
                                 &sort_index_type)
         mpi.MPI_Type_commit(&sort_index_type)
         cdef mpi.MPI_Op Partial_merge_loc
