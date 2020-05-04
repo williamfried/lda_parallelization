@@ -37,8 +37,6 @@ def iterate_bucket_items(bucket):
     :param bucket: name of s3 bucket
     :return: dict of metadata for an object
     """
-
-
     client = boto3.client('s3')
     paginator = client.get_paginator('list_objects_v2')
     page_iterator = paginator.paginate(Bucket=bucket)
@@ -48,15 +46,15 @@ def iterate_bucket_items(bucket):
             for item in page['Contents']:
                 yield item
 
+#directory = 'patents_partial1/'
+bucket_name = 'cs205-lda-patents'
 
-directory = 'patents_partial1/'
-bucket_name = 'project-cs205-pantent-lda'
-
-files = []
-for i in iterate_bucket_items(bucket=bucket_name):
-    file_name = i['Key'][len(directory):]
-    if file_name[-4:] == '.nlp':
-        files.append(file_name)
+#files = []
+#for i in iterate_bucket_items(bucket=bucket_name):
+#    file_name = i['Key']#[len(directory):]
+    #if file_name[-4:] == '.nlp':
+    #    files.append(file_name)
+#    print(file_name)
 
 def get_patent_words(x):
     words = []
@@ -77,8 +75,9 @@ def get_patent_words(x):
                 words.append(word)
     return words
 
-for i, filename in enumerate(files):
-    doc = sc.textFile('s3://'+ bucket_name + '/' + directory + filename).map(get_patent_words)
+for i, file_dict in enumerate(iterate_bucket_items(bucket=bucket_name)):
+    filename = file_dict['Key']
+    doc = sc.textFile('s3://'+ bucket_name + '/' + filename).map(get_patent_words)
     doc = doc.map(lambda word: ('doc'+str(i), word))
     doc = doc.reduceByKey(lambda a,b: a+b)
     if i == 0:
@@ -88,7 +87,6 @@ for i, filename in enumerate(files):
     
 documents_counts = documents_counts.map(lambda tup: Counter(tup[1]).most_common())
 
-print('HAAAAALOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
 # get words that occur at least 'min_word_occurrences' times throughout all documents and occur in at least
 # 'min_document_occurrences' different documents
 words_in_vocab = (documents_counts.flatMap(lambda doc: [(key, (value, 1)) for key, value in doc])
