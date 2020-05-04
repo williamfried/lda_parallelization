@@ -84,7 +84,7 @@ for i, file_dict in enumerate(iterate_bucket_items(bucket=bucket_name)):
         documents_counts = doc
     else:
         documents_counts = documents_counts.union(doc)
-    
+
 documents_counts = documents_counts.map(lambda tup: Counter(tup[1]).most_common())
 
 # get words that occur at least 'min_word_occurrences' times throughout all documents and occur in at least
