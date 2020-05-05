@@ -32,7 +32,7 @@ sc = SparkContext.getOrCreate(conf=conf)
 
 min_doc_length = 10
 min_word_occurrences = 5
-min_document_occurrences = 1
+min_document_occurrences = 3
 
 # need this function to iterate over bucket items
 def iterate_bucket_items(bucket):
@@ -54,7 +54,7 @@ def iterate_bucket_items(bucket):
                 yield item
 
 bucket_name = 'cs205-lda-patents'
-bucket_name = "test-docs-cs-205-lda"
+#bucket_name = "test-docs-cs-205-lda"
 
 
 def get_patent_words(x):
@@ -101,7 +101,8 @@ for file_dict in iterate_bucket_items(bucket=bucket_name):
     else:
         documents_counts = documents_counts.union(doc)
     document_counter += 1
-
+    #if document_counter > 5:
+    #    break
 
 """
 After the reduceByKey, the output is like:
@@ -129,16 +130,18 @@ documents_counts = documents_counts.flatMap(
     ).reduceByKey(lambda prev, next: prev + next
 )
 
+
 """
 get words that occur at least 'min_word_occurrences' times throughout all
 documents and occur in at least 'min_document_occurrences' different documents
 """
 words_in_vocab = (documents_counts.flatMap(
-        lambda doc: [(key, (value, 1)) for key, value in doc]
+        lambda doc : [(key, (value, 1)) for key, value in doc[1]]
     ).reduceByKey(
         lambda x, y: (x[0] + y[0], x[1] + y[1])
     ).filter(lambda x: x[1][0] >= min_word_occurrences and x[1][1] >= min_document_occurrences)
 )
+
 
 """
 words_in_vocab should now contain:
@@ -158,29 +161,16 @@ words_in_vocab should now contain:
 
 # map each word to an arbitrary integer between 0 and vocab_size - 1
 word2num = {word: i for i, (word, _) in enumerate(words_in_vocab.collect())}
+word2numRDD = words_in_vocab.map(lambda tup:tup[0]).zipWithIndex()
+# save word2num
+word2numRDD.saveAsTextFile('s3://' + bucket_name + '/' + 'word2num_patents.txt')
 
 # filter out words that aren't in the vocabulary and convert words that are in the vocabulary to the corresponding
 # integers
-document_counts_numerical = documents_counts.map(lambda doc_counts: {word2num[word]: cnt for word, cnt in doc_counts if word in word2num})
-
 # map each document (represented by an integer between 0 and document_number - 1) to a dictionary that maps each word
 # to the number of times it appears in the given document
-doc_id2counts = {i: count_dict for i, count_dict in enumerate(document_counts_numerical.collect())}
+document_counts_numerical = documents_counts.map(lambda doc_counts: {word2num[word]: cnt for word, cnt in doc_counts[1] if word in word2num})
 
-# two objects we need from here:
-# 1. word2num to reverse the dictionary and recover the words corresponding to each integer after LDA is performed
-# 2. doc_id2counts
+document_counts_numerical = document_counts_numerical.zipWithIndex().map(lambda tup : (tup[1],tup[0]))
 
-with open('s3://' + bucket_name + '/' + 'word2num_patents.txt', 'w') as f:
-    f.write(json.dumps(word2num))
-
-with open('s3://' + bucket_name + '/' + 'doc_id2counts_patents.txt', 'w') as f:
-    f.write(json.dumps(doc_id2counts))
-
-
-"""
-3 things:
-1. stack overflow error
-2. Two outputs, word2num -- currently a dict, needs to translate to RDD, save that RDD as a text file in the bucket.
-3. doc_id2counts -- also a dictionary and need to translate to RDD and save that as a text file.
-"""
+document_counts_numerical.saveAsTextFile('s3://' + bucket_name + '/' + 'doc_id2counts_patents.txt')
