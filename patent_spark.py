@@ -32,7 +32,7 @@ sc = SparkContext.getOrCreate(conf=conf)
 
 min_doc_length = 10
 min_word_occurrences = 5
-min_document_occurrences = 3
+min_document_occurrences = 5
 
 # need this function to iterate over bucket items
 def iterate_bucket_items(bucket):
@@ -68,7 +68,7 @@ def get_patent_words(x):
         valid = True
         if word in stop_words:
             valid = False
-        if len(word) < 2:
+        if len(word) < 4:
             valid = False
         if any(char.isdigit() for char in word):
             valid = False
@@ -101,8 +101,8 @@ for file_dict in iterate_bucket_items(bucket=bucket_name):
     else:
         documents_counts = documents_counts.union(doc)
     document_counter += 1
-    #if document_counter > 5:
-    #    break
+    if document_counter > 1000:
+        break
 
 """
 After the reduceByKey, the output is like:
@@ -125,9 +125,9 @@ After the entire process, the result is like:
 """
 documents_counts = documents_counts.flatMap(
         lambda doc: [((doc[0], word), 1) for word in doc[1]]
-    ).reduceByKey(lambda prev, next: prev + next
+    ).reduceByKey(lambda prev, nextt: prev + nextt
     ).map(lambda line: (line[0][0], [(line[0][1], line[1])])
-    ).reduceByKey(lambda prev, next: prev + next
+    ).reduceByKey(lambda prev, nextt: prev + nextt
 )
 
 
@@ -160,6 +160,7 @@ words_in_vocab should now contain:
 """
 
 # map each word to an arbitrary integer between 0 and vocab_size - 1
+words_in_vocab.saveAsTextFile('s3://' + bucket_name + '/' + 'vocab.txt')
 word2num = {word: i for i, (word, _) in enumerate(words_in_vocab.collect())}
 word2numRDD = words_in_vocab.map(lambda tup:tup[0]).zipWithIndex()
 # save word2num
