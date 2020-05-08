@@ -87,9 +87,6 @@
           <h2>Project Design</h2>
           <p class="section_paragraph">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.
           Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.</p>
-
-
-
           <img class="diagram" src="images/parallelization_design_diagram.png">
 
         </div>
@@ -102,8 +99,29 @@
       <div class="row">
         <div class="col-lg-12">
           <h2>Parallelization</h2>
-          <p class="section_paragraph">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.
-          Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.</p>
+          <p class="section_paragraph">
+            As outlined in the project design, the first step in the parallelization of LDA in this project will be the preprocessing of the documents using Spark. Recall that we chose to use the Google PATENT dataset (publicly available from Stanford DeepDive) as input. The entire dataset (428 GB) contains over 2 Million patent grants issued in the US since 1920. For the purpose of this project, only a subset of around 500,000 documents has been used. Given that the computational complexity of the LDA algorithm is proportional to the number of documents, we decided that this was enough to justify the need for parallel processing and would clearly illustrate the impact of our parallelization efforts. 
+              
+            The patents are given as NLP files spread over multiple folders. The Spark pipeline will need to process this raw input to the exact input format as required by the CGS algorithm. More specifically, it needs to:
+              
+            <ul>
+                <li>Read in all the words over all the patents and filter out the stopwords, small words or special characters.</li>
+                <li>Count all the occurences of each word per document.</li>
+                <li>Aggregate all the filtered words and compose the vocabulary to be considered by the algorithm. In this step, a minimum of total number of occurences of a word over all documents and a minimum individual document occurences will be applied to all words. As such, a coherent topic distribution can be reached.</li>
+                <li>Write two main outputs:
+                <ul>
+                    <li>The entire vocabulary, where each word is matched to its index.</li>
+                    <li>A dictionary mapping each document to a list of all the words from the vocabulary that appear in that document and its corresponding count. </li>
+                </ul>
+                </li>
+            </ul>
+            
+            The serial implementation of this preprocessing for the considered dataset was estimated to take multiple hours. As such, we decided to develop a parallel version using Apache Spark and run it on an EMR cluster on AWS. First, the files needed were uploaded to an S3 bucket, after which they were added to the Hadoop file system within the cluster. The I/O-commands and RDD operations needed for the preprocessing could then easily be implemented using PySpark. 
+            
+            ***DISCUSS CLUSTER SETUP
+            ***DISCUSS SPEEDUP
+            
+            </p>
         </div>
       </div>
     </div>
