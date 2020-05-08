@@ -3,8 +3,8 @@ import sys
 import time
 import nltk
 from nltk.corpus import stopwords
-import boto3
 import os
+import re
 
 try:
     nltk.corpus.cmudict.dict()
@@ -17,30 +17,11 @@ domain_specific_stop_words = {'reference','references'}
 stop_words |= domain_specific_stop_words
 
 output_file = 'all_patent_docs.txt'
-bucket_name = 'cs205-lda-patents'
-
-def iterate_bucket_items(bucket):
-    """
-    Generator that iterates over all objects in a given s3 bucket
-
-    See http://boto3.readthedocs.io/en/latest/reference/services/s3.html#S3.Client.list_objects_v2
-    for return data format
-    :param bucket: name of s3 bucket
-    :return: dict of metadata for an object
-    """
-    client = boto3.client('s3')
-    paginator = client.get_paginator('list_objects_v2')
-    page_iterator = paginator.paginate(Bucket=bucket)
-
-    for page in page_iterator:
-        if page['KeyCount'] > 0:
-            for item in page['Contents']:
-                yield item
 
 
 def extract_words(filename, q):
     s = ''
-    with open('s3://'+ bucket_name + '/' + filename, 'r') as f:
+    with open(filename, 'r') as f:
         for line in f:
             line = line.lstrip()
             split_line = line.split('\t')
@@ -49,14 +30,15 @@ def extract_words(filename, q):
                 word = split_line[1]
                 word = re.sub("[(),\[\]{}!.?@+_:;'$`&]", '', word.lower()).replace('-','')
                 if not (word in stop_words or len(word) < 4 or any(char.isdigit() for char in word)):
-                    s += ' ' + word
+                    s += word + ' '
 
+    s = s.rstrip()
     q.put(s)
 
 def listener(q):
     '''listens for messages on the q, writes to file. '''
 
-    with open('s3://'+ bucket_name + '/' + output_file, 'w') as f:
+    with open(output_file, 'w') as f:
         while True:
             m = q.get()
             if m == 'kill':
@@ -77,14 +59,14 @@ watcher = pool.apply_async(listener, (q,))
 # nlp_file_extension = ".nlp"
 # nlp_file_extension_len = len(nlp_file_extension)
 
-filenames = [(file_dict['Key'], q) for file_dict in iterate_bucket_items(bucket_name) if file_dict['Key'].endswith('.nlp')]
+patent_filenames = []
+for directory in os.listdir():
+    if directory.startswith('patents'):
+        patent_filenames.extend([(directory + '/' + filename, q) for filename in os.listdir(directory) if filename.endswith('.nlp')])
 
-print(len(filenames))
+pool.starmap(extract_words, patent_filenames)
+
 print(time.perf_counter() - t0)
-sys.exit(2)
-
-
-pool.starmap(extract_words, filenames)
 
 #fire off workers
 #jobs = []
