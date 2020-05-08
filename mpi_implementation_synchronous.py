@@ -243,7 +243,7 @@ class LDA:
                                                   source=(self.mpi_rank - 1) % self.mpi_size)
 
             # wait for all nodes to reach this point before proceeding to next iteration
-            self.comm.Barrier()
+            # self.comm.Barrier()
 
         # each node sends local info to node 0
         doc2topic2cnt_lst = self.comm.gather(self.doc2topic2cnt, root=0)
