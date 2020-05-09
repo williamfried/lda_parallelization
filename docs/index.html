@@ -72,13 +72,19 @@
         <div class="col-lg-12">
           <h2 style="padding-top:40px">Introduction</h2>
           <p class="section_paragraph">
-              Latent Dirichlet Allocation (LDA) is a popular unsupervised, Bayesian hierarchical model commonly applied to topic modelling. Given a list of documents, a prespecified number of topics, and several hyperparameters, LDA assigns each word in the corpus to a particular topic. Based on these assignments, LDA learns two main features of the corpus: first, it identifies each topic by ranking the importance of each word in the vocabulary to the given topic; and second, it weighs the contribution of each topic to the content of each document. The figure below illustrates how LDA results in a topic distribution for each document. To the right, we show a list of 20 words that we have found associated with a selected topic in the distribution. Clearly, the results make sense, as all words displayed are thematically related––in this case, the stock market. 
-          </p>
+              Latent Dirichlet Allocation (LDA) is a popular unsupervised, Bayesian hierarchical model commonly applied to topic modelling. Given a list of documents, a prespecified number of topics, and several hyperparameters, LDA assigns each word in the corpus to a particular topic. Based on these assignments, LDA learns two main features of the corpus: 
+              
+            <ul>
+                <li>It identifies each topic by ranking the importance of each word in the vocabulary to the given topic;</li>
+                <li>It weighs the contribution of each topic to the content of each document.</li>
+            </ul>
+              
+            The figure below illustrates how LDA results in a topic distribution for each document. To the right, we show a list of 20 words that we have found associated with a selected topic in the distribution. Clearly, the results make sense, as all words displayed are thematically related––in this case, the stock market. </p>
 
           <img class="diagram" src="images/lda_diagram.png">
 
           <p class="section_paragraph">
-              In this project, we developed a parallelized version of LDA and apply it to Stanford's DeepDive Google PATENT dataset. It contains over 2 Million patents issued in the United States since 1920. We believe that topic distribution is naturally present in a large corpus of patents and are therefore convinced that LDA can lead to meaningful and useful results. Given the size of the dataset we will consider and the fact that computational complexity increases with the number of documents, it is definitely interesting to explore parallelization techniques. 
+              In this project, we developed a parallelized version of LDA and apply it to Stanford's DeepDive Google PATENT dataset (<a href = http://deepdive.stanford.edu/opendata>link</a>). It contains over 2 Million patents issued in the United States since 1920. We believe that topic distribution is naturally present in a large corpus of patents and are therefore convinced that LDA can lead to meaningful and useful results. Given the size of the dataset we will consider and the fact that computational complexity increases with the number of documents, it is definitely interesting to explore parallelization techniques.               
           </p>
 
         </div>
@@ -104,7 +110,7 @@
           <p class="section_paragraph">
               There are several quantitative metrics that can be used to assess the quality of the topic model. The first is a perplexity score, which approximates the likelihood of the words in a held-out set of documents. However, while likelihood-based metrics are often the optimal evaluation criterion, it has been shown that LDA models that are optimized by minimizing the perplexity score often do not align with human judgement about what constitutes a logical topic. Another metric is called topic coherence and is a much more intuitive measurement. The basic idea is that if the model believes that two arbitrary words, i and j, are among the most common words in a given topic, then these two words should often appear together in the same document. One way to quantify this is to calculate the condition probability of word j appearing in a document given that word i appears in the document. By the definition of conditional probability, this is equal to the total number of documents in which words i and j coappear divided by the total number of documents in which word i appears. To calculate the topic coherence of a single topic, the log of these conditional probabilities is computed for all pairs of word i and j among the M most probable words in the given topic, and these calculations are summed together. </p>
               
-              <img class="diagram" src="images/CoherenceFormula.png">
+              <img class="center" src="images/CoherenceFormula.png" width="600" height="80">
             
             <p class="section_paragraph">
               Finally, because there are multiple topics, this whole procedure is repeated for all T topics and the average of these topic coherences is taken to be the overall topic coherence measurement. The CGS algorithm has converged to the true posterior distribution when this topic coherence metric doesn't significantly change between consecutive iterations. 
@@ -117,7 +123,7 @@
 
               where t_doc represents the total number of topics assigned in document d. 
 
-              Based on the properties of the Dirichlet distribution, the probability of the cth category is proportional to the cth parameter. This means that the most common words associated with a topic and the most common topics associated with a document are those that have the highest corresponding Dirichlet parameter. 
+              Based on the properties of the Dirichlet distribution, the probability of the c-th category is proportional to the c-th parameter. This means that the most common words associated with a topic and the most common topics associated with a document are those that have the highest corresponding Dirichlet parameter. 
 
           </p>
 
@@ -170,22 +176,14 @@
             <p class="section_paragraph">
                 Finally, we need to handle the topic-specific count. At first this may seem like a futile proposition because every single word that is reassigned modifies the topic-specific count, which means it would be impossible for each node to have an accurate topic-specific count. However, all hope is not lost because CGS is a Markov Chain Monte Carlo algorithm, so we only need to converge to the same posterior distribution. This means that even if each node only has access to an approximate topic-specific count, the sampling will still converge, albeit a little slower, as long as the count is updated periodically. 
               </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="parallel">
-    <div class="container">
-      <div class="row">
-        <div class="col-lg-12">
-          <h2>Project Design</h2>
-          <p class="section_paragraph">
-            The following figure illustrates the overall parallelization scheme that will be implemented. First, we'll use Achache Spark to preprocess the large PATENT dataset, run on multiple nodes withing an EMR cluster. Once the data is correclty preprocessed, we distribute the results over multiple nodes in our cluster. These nodes will then sample with the Gibbs Sampling algorithm, and communicate the intermediate results to one another using MPI. Within each node, we can achieve further speedup by leveraging OpenMP. 
-            </p>
-          <img class="diagram" src="images/parallelization_design_diagram.png">
             
             <p class="section_paragraph">
+            The following figure illustrates the overall parallelization scheme that will be implemented. First, we'll use Achache Spark to preprocess the large PATENT dataset, run on multiple nodes withing an EMR cluster. Once the data is correclty preprocessed, we distribute the results over multiple nodes in our cluster. These nodes will then sample with the Gibbs Sampling algorithm, and communicate the intermediate results to one another using MPI. Within each node, we can achieve further speedup by leveraging OpenMP. 
+            </p>
+            
+            <img class="diagram" src="images/parallelization_design_diagram.png">
+            
+             <p class="section_paragraph">
             The next paragraphs will further elaborate on the detailed implementation of the Spark preprossing, MPI and OpenMP. </p>
         </div>
       </div>
@@ -230,8 +228,9 @@
       <div class="row">
         <div class="col-lg-12">
           <h2>Citations</h2>
-          <p class="section_paragraph">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.
-          Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.</p>
+          <p class="section_paragraph">
+            To be filled            
+            </p>
         </div>
       </div>
     </div>
