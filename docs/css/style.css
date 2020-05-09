@@ -82,6 +82,13 @@ section {
   max-width: 80%;
 }
 
+.center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 50%;
+}
+
 
 /* SOME MEDIA QUERIES TO MAKE IT RESPONSIVE BABY */
 @media only screen and (max-width: 600px) {
