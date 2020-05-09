@@ -34,14 +34,20 @@
       <div class="collapse navbar-collapse" id="navbarResponsive">
         <ul class="navbar-nav ml-auto">
           <li class="nav-item">
-            <a class="nav-link js-scroll-trigger" href="#overview">LDA Overview</a>
+            <a class="nav-link js-scroll-trigger" href="#Introduction">Introduction</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link js-scroll-trigger" href="#design">Project Design</a>
+            <a class="nav-link js-scroll-trigger" href="#inference">Inference for LDA</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link js-scroll-trigger" href="#parallelization">Parallelization</a>
+            <a class="nav-link js-scroll-trigger" href="#serial">Serial Implementation</a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link js-scroll-trigger" href="#paralleloverview">Parallel Approach</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link js-scroll-trigger" href="#parallel">Parallel Implementation & Performance</a>
+          </li>            
           <li class="nav-item">
             <a class="nav-link js-scroll-trigger" href="#citations">Citations</a>
           </li>
@@ -60,35 +66,127 @@
     </div>
   </header>
 
-  <section id="overview">
+  <section id="Introduction">
     <div class="container">
       <div class="row">
         <div class="col-lg-12">
-          <h2 style="padding-top:40px">LDA Overview</h2>
-          <p class="section_paragraph">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.
+          <h2 style="padding-top:40px">Introduction</h2>
+          <p class="section_paragraph">
+              Latent Dirichlet Allocation (LDA) is a popular unsupervised, Bayesian hierarchical model commonly applied to topic modelling. Given a list of documents, a prespecified number of topics, and several hyperparameters, LDA assigns each word in the corpus to a particular topic. Based on these assignments, LDA learns two main features of the corpus: first, it identifies each topic by ranking the importance of each word in the vocabulary to the given topic; and second, it weighs the contribution of each topic to the content of each document. The figure below illustrates how LDA results in a topic distribution for each document. To the right, we show a list of 20 words that we have found associated with a selected topic in the distribution. Clearly, the results make sense, as all words displayed are thematically related––in this case, the stock market. 
           </p>
-
-          <p class="section_paragraph">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.</p>
 
           <img class="diagram" src="images/lda_diagram.png">
 
-          <p class="section_paragraph">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.
+          <p class="section_paragraph">
+              In this project, we developed a parallelized version of LDA and apply it to Stanford's DeepDive Google PATENT dataset. It contains over 2 Million patents issued in the United States since 1920. We believe that topic distribution is naturally present in a large corpus of patents and are therefore convinced that LDA can lead to meaningful and useful results. Given the size of the dataset we will consider and the fact that computational complexity increases with the number of documents, it is definitely interesting to explore parallelization techniques. 
           </p>
 
         </div>
       </div>
     </div>
   </section>
+    
+    <section id="inference">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-12">
+          <h2 style="padding-top:40px">Inference for LDA</h2>
+          <p class="section_paragraph">
+              There are several inference procedures to infer the distribution of words per topic and the distribution of topics per document. The two most common approaches are variational Bayesian inference and collapsed Gibbs sampling. For this project, we focused on parallelizing the collapsed Gibbs sampling algorithm (CGS). CGS works as follows: first, each word in each of the documents is randomly assigned to one of the T topics. After this initialization step, the first iteration of CGS is performed where each word in the corpus is reassigned to a new topic. For an arbitrary word w in document j, this is achieved by sampling from the a categorical distribution, where the unnormalized weight associated with each topic T is:
+              
+              FORMULA
+              
+              where n_doc represents the number of words in document d assigned to topic T, n_word represents the number of times word w is assigned to topic T across all documents and n_all represents the number of words in the corpus that are assigned to topic T. 
+              
+              These iterations are performed indefinitely until the algorithm converges. 
+          </p>
 
-  <section id="design">
+          <p class="section_paragraph">
+              There are several quantitative metrics that can be used to assess the quality of the topic model. The first is a perplexity score, which approximates the likelihood of the words in a held-out set of documents. However, while likelihood-based metrics are often the optimal evaluation criterion, it has been shown that LDA models that are optimized by minimizing the perplexity score often do not align with human judgement about what constitutes a logical topic. Another metric is called topic coherence and is a much more intuitive measurement. The basic idea is that if the model believes that two arbitrary words, i and j, are among the most common words in a given topic, then these two words should often appear together in the same document. One way to quantify this is to calculate the condition probability of word j appearing in a document given that word i appears in the document. By the definition of conditional probability, this is equal to the total number of documents in which words i and j coappear divided by the total number of documents in which word i appears. To calculate the topic coherence of a single topic, the log of these conditional probabilities is computed for all pairs of word i and j among the M most probable words in the given topic, and these calculations are summed together. </p>
+              
+              <img class="diagram" src="images/CoherenceFormula.png">
+            
+            <p class="section_paragraph">
+              Finally, because there are multiple topics, this whole procedure is repeated for all T topics and the average of these topic coherences is taken to be the overall topic coherence measurement. The CGS algorithm has converged to the true posterior distribution when this topic coherence metric doesn't significantly change between consecutive iterations. 
+
+              Once the CGS has converged, the final step is to calculate the distribution of words per topic and the distribution of topics per document. The posterior distribution of words for each topic t is a V-dimensional Dirichlet distribution with the following parameter for each word w in the vocabulary:
+
+
+              The posterior distribution of topics for each document d is T-dimensional Dirichlet distribution with the following parameter for each topic t:
+
+
+              where t_doc represents the total number of topics assigned in document d. 
+
+              Based on the properties of the Dirichlet distribution, the probability of the cth category is proportional to the cth parameter. This means that the most common words associated with a topic and the most common topics associated with a document are those that have the highest corresponding Dirichlet parameter. 
+
+          </p>
+
+        </div>
+      </div>
+    </div>
+  </section>
+    
+    <section id="serial">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-12">
+          <h2 style="padding-top:40px">Serial Implementation</h2>
+          <p class="section_paragraph">
+              
+
+          <p class="section_paragraph">
+              The serial version of CGS, where one process is assigned all of the documents, follows naturally from the general procedure described above. First, the three counts described above are initialized to zero. The next step involves iterating over each document in the corpus and over every word in each document and randomly assigns each word to one of the T topics specified by the caller. After word w is assigned to topic T in document d, the three corresponding counts are incremented by one; namely, the number of words in document d that are assigned to topic T, the number of times that word w is assigned to topic T across all documents, and the number of words assigned to topic T across all documents. Overall, the time complexity of this initialization step is O(d\*w) where d represents the number of documents in the corpus, and w represents the average number of words per document. </p>
+              
+            <p class="section_paragraph">
+              At this point, we're ready to begin performing CGS. Just as with the initialization step, this involves iterating over each word in each document. The process of reassigning word w in document d that was previously assigned to topic T_old consists of three parts. First, word w is unassigned from topic T_old, which is represented by decrementing the three relevant counts. Next, the unnormalized weight is determined for each of the T topics by calculating the expression defined above, and a random topic, T_new, is sampled from the resulting categorical distribution. Finally, word w is assigned to topic T_new, which is represented by incrementing the three relevant counts. After each iteration, the topic coherence metric described above is calculated and compared to the value of the previous iteration. Just as with the initialization step, because each iteration involves looping through each word in the corpus, the time complexity of each iteration is O(d*w), which means that the time complexity of the algorithm as a whole is also O(d*w).
+          </p>
+
+        </div>
+      </div>
+    </div>
+  </section>
+    
+    <section id="paralleloverview">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-12">
+          <h2 style="padding-top:40px">Parallel Approach</h2>
+          <p class="section_paragraph">
+              
+
+          <p class="section_paragraph">
+              It's not trivial to parallelize the CGS algorithm. This is the case because the categorical distribution that is used to reassign each word depends on the three count values that are constantly changing as words are being processed. In other words, setting up the proper categorical distribution depends on knowing the topic assignment of others word in the corpus at the given time. However, all hope is not lost because setting up the categorical distribution depends on knowing only a subset of the topic assignments of the other word in the corpus. Therefore, our goal is to find a way to reassign multiple words at the same time such that the topic assignments of one of these words doesn't affect, or only slightly affects, the topic assignments of the other words. Because each word assignment relies on the document-specific, word-specific and topic-specific counts, each of these counts must be thought about separately.</p>
+              
+            <p class="section_paragraph">
+              Of the three counts, the document-specific count is the easiest to handle. If we ensure that no two words from the same document are reassigned at the same time, then the document-specific count corresponding to each word will be independent of each other. We can easily achieve this by allocating multiple nodes a subset of the total number of documents in the corpus, such that each document is completely owned by one of the nodes. This guarantees that when a node reassigns a word in a given document, it has access to the precise document-specific count. </p>
+            
+            <p class="section_paragraph">
+              Dealing with the word-specific count is more complicated. The issue is that if multiple nodes reassign multiple occurrences of a given word in the corpus, then the word-specific count will be different across the nodes. Therefore, we must find a way to ensure that only one node is processing a given word in the vocabulary at any one time. This can be achieved by creating a tuple for each word that contains the word itself (e.g. 'invention') and its associated count. Next, we enforce a system where only the node that possesses the tuple for word w has permission to reassign word w (just as a student in elementary school needs to be in possession of a bathroom pass to walk in the hallways). Because there is only one tuple for each word in circulation, this guarantees that no two nodes simultaneously reassign the same word. Now of course each node most likely has documents that contain a given word in the vocabulary, which means that each node must periodically be in possession of each of these tuples.  </p>
+            
+            <p class="section_paragraph">
+                This can be achieved as follows: upon initialization, each node is assigned an equal portion of the tuples, such that the workload is spread out as evenly as possible. (While the workload associated with each tuple is proportional to the frequency of the associated word in the corpus, the law of large numbers guarantees that the high-frequency and low-frequency words will balance out such that the workload is roughly the same for each of the nodes.) These tuples are then placed in a queue, which is a first in, first out data structure. Each node then pops the first tuple off of its queue and processes it by reassigning each occurance of the given word across the documents allotted to it and updating the word-specific count to reflect these reassignments. Once this has been completed, each node passes off this updated tuple to the next node (e.g. node 0 to 1, 1 to 2, 2 to 3, 3 to 0), which proceeds to push this tuple onto its own queue. This next node now has the exact word-specific count needed to properly reassign the occurrences of the word in its document. Each node is now free to pop the next tuple off of its queue and repeat the same procedure. 
+              </p>
+
+            <p class="section_paragraph">
+                Finally, we need to handle the topic-specific count. At first this may seem like a futile proposition because every single word that is reassigned modifies the topic-specific count, which means it would be impossible for each node to have an accurate topic-specific count. However, all hope is not lost because CGS is a Markov Chain Monte Carlo algorithm, so we only need to converge to the same posterior distribution. This means that even if each node only has access to an approximate topic-specific count, the sampling will still converge, albeit a little slower, as long as the count is updated periodically. 
+              </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="parallel">
     <div class="container">
       <div class="row">
         <div class="col-lg-12">
           <h2>Project Design</h2>
-          <p class="section_paragraph">Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos. Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.
-          Lorem ipsum dolor sit amet, consectetur adipisicing elit. Aut optio velit inventore, expedita quo laboriosam possimus ea consequatur vitae, doloribus consequuntur ex. Nemo assumenda laborum vel, labore ut velit dignissimos.</p>
+          <p class="section_paragraph">
+            The following figure illustrates the overall parallelization scheme that will be implemented. First, we'll use Achache Spark to preprocess the large PATENT dataset, run on multiple nodes withing an EMR cluster. Once the data is correclty preprocessed, we distribute the results over multiple nodes in our cluster. These nodes will then sample with the Gibbs Sampling algorithm, and communicate the intermediate results to one another using MPI. Within each node, we can achieve further speedup by leveraging OpenMP. 
+            </p>
           <img class="diagram" src="images/parallelization_design_diagram.png">
-
+            
+            <p class="section_paragraph">
+            The next paragraphs will further elaborate on the detailed implementation of the Spark preprossing, MPI and OpenMP. </p>
         </div>
       </div>
     </div>
@@ -98,7 +196,7 @@
     <div class="container">
       <div class="row">
         <div class="col-lg-12">
-          <h2>Parallelization</h2>
+          <h2>Parallel Impementation & Performance</h2>
           <p class="section_paragraph">
             As outlined in the project design, the first step in the parallelization of LDA in this project will be the preprocessing of the documents using Spark. Recall that we chose to use the Google PATENT dataset (publicly available from Stanford DeepDive) as input. The entire dataset (428 GB) contains over 2 Million patent grants issued in the US since 1920. For the purpose of this project, only a subset of around 500,000 documents has been used. Given that the computational complexity of the LDA algorithm is proportional to the number of documents, we decided that this was enough to justify the need for parallel processing and would clearly illustrate the impact of our parallelization efforts. 
               
