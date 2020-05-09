@@ -36,25 +36,30 @@ cdef class LDA:
     # Should always be the case that
     # {start == size_vocab * split_num // mpi_size} and that
     # {stop == size_vocab * (split_num + 1) // mpi_size}
-    cdef (int, int, int) current_tokens
+    cdef readonly (int, int, int) current_tokens
     # {n_doc[doc][topic]} contains corresponding count
     cdef readonly int[:, ::1] n_doc
     cdef readonly int[::1] n_all
     cdef readonly double alpha, beta, beta_sum
     # Number of OMP threads to use
     cdef readonly int num_threads
-    # We only need access to bitgen_states_ptr, but we keep rand_gen
+    # We only need access to {bitgen_states_ptr}, but we keep rand_gen
     # to make sure that they don't get garbage collected
     cdef list rand_gens
     cdef vector[bitgen_t *] *bitgen_states_ptr
     # Vector of locks, each corresponding to a topic
     cdef vector[omp_lock_t] *omp_locks_ptr
     cdef mpi.MPI_Comm mpi_comm
-    cdef int mpi_size
-    cdef int mpi_rank
-    # Defined just to allocate the memory in the init;
-    # would otherwise require lots of mallocs and frees of same size
+    cdef readonly int mpi_size
+    cdef readonly int mpi_rank
+    # Defined just to allocate the memory;
+    # would otherwise require lots of {malloc}s and {free}s of same size
     cdef double[:, ::1] pmf
+
+    def __init__(self, file_path, num_topics, alpha, beta, size_vocab,
+                 size_corpus, num_threads=1, seed=205):
+        """See {__cinit__}"""
+        pass
 
     def __cinit__(self, file_path, num_topics, alpha, beta, size_vocab,
                   size_corpus, num_threads=1, seed=205):
@@ -182,7 +187,7 @@ cdef class LDA:
                         old_topic = self.assignment_ptr[0][token][doc_index][j]
                         self.n_token[token_index, old_topic] -= 1
                         omp_set_lock(&(self.omp_locks_ptr[0][old_topic]))
-                        self.n_doc[document, old_topic] -=1
+                        self.n_doc[document, old_topic] -= 1
                         n_all_upd[old_topic] -= 1
                         omp_unset_lock(&(self.omp_locks_ptr[0][old_topic]))
                         self.pmf[omp_get_thread_num(), old_topic] = (
