@@ -15,6 +15,7 @@ from cython.parallel cimport prange
 from mpi4py cimport libmpi as mpi  # C API
 from libc.stdlib cimport malloc, calloc, free
 import re
+import fileinput
 
 
 # Indicates that LDA is not subclassed;
@@ -62,12 +63,12 @@ cdef class LDA:
     # would otherwise require lots of {malloc}s and {free}s of same size
     cdef double[:, ::1] pmf
 
-    def __init__(self, file_path, num_topics, alpha, beta, size_vocab,
+    def __init__(self, file_list, num_topics, alpha, beta, size_vocab,
                  size_corpus, num_threads=1, seed=205, shuffle_words=False):
         """See {__cinit__}"""
         pass
 
-    def __cinit__(self, file_path, num_topics, alpha, beta, size_vocab,
+    def __cinit__(self, file_list, num_topics, alpha, beta, size_vocab,
                   size_corpus, num_threads=1, seed=205, shuffle_words=False):
         cdef int i
         self.num_topics = num_topics
@@ -126,7 +127,7 @@ cdef class LDA:
         cdef int token, token_original, doc, count
         cdef str line
         cdef list line_split, occurrences
-        with open(file_path) as file:
+        with fileinput.input(file_list) as file:
             # Randomly initialize assignments and record assignments
             for doc, line in enumerate(file):
                 line_split = re.findall(r"\d+", line)
