@@ -40,10 +40,6 @@ class LDA:
         '''Compute the unnormalized mass associated with a specific topic given the relevant count information.'''
         return (n_doc + self.alpha) * (n_word + self.beta) / (n_all + self.beta_sum)
 
-    def compute_perplexity(self):
-        '''Calculate perplexity score after each iteration to determine if the algorithm has converged. '''
-        pass
-
     def update_counts(self, doc_id, word, topic, direction):
         val = 1 if direction == 'up' else -1
         self.doc2word2topic2cnt[doc_id][word][topic] += val
