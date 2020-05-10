@@ -9,6 +9,23 @@ body {
    font-weight: 200;
 }
 
+h2 {
+  font-size: 40px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-weight: 700;
+}
+
+h3 {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+h4 {
+  font-size: 20px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
 
 /* THESE ARE CLASSES INCLUDED WITH BOOTSTRAP THAT WE'LL AMEND */
 
@@ -27,8 +44,6 @@ body {
 
 
 /* THESE ARE ATTRIBUTES THAT WE'RE DEFINING */
-
-
 
 
 header {
