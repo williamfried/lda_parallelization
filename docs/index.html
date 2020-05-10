@@ -83,7 +83,7 @@
 
             The figure below illustrates how LDA results in a topic distribution for each document. To the right, we show a list of 20 words that we have found associated with a selected topic in the distribution. Clearly, the results make sense, as all words displayed are thematically related––in this case, the stock market.  Because LDA is so widely used and well documented, we omit the details of the generative model. </p>
 
-          <img class="diagram" src="images/lda_diagram.png">
+          <img class="diagram_large" src="images/lda_diagram.png">
 
           <p class="section_paragraph">
               In this project, we developed a parallelized version of LDA and apply it to Stanford's DeepDive Google PATENT dataset (<a href = http://deepdive.stanford.edu/opendata>link</a>). It contains over 2.5 Million patents issued in the United States since 1920. We believe that topic distribution is naturally present in a large corpus of patents and are therefore convinced that LDA can lead to meaningful and useful results. Given the size of the dataset we will consider and the fact that the computational complexity of the algorithm increases with the number of documents, it is definitely interesting to explore parallelization techniques.
@@ -105,7 +105,7 @@
           <p class="section_paragraph">
               There are several quantitative metrics that can be used to assess the quality of the topic model. The first is a perplexity score, which approximates the likelihood of the words in a held-out set of documents. However, while likelihood-based metrics are often the optimal evaluation criterion, it has been shown that LDA models that are optimized by minimizing the perplexity score often do not align with human judgement about what constitutes a logical topic. Another metric is called topic coherence and is a much more intuitive measurement. The basic idea is that if the model believes that two arbitrary words, i and j, are among the most common words in a given topic, then these two words should often appear together in the same document. One way to quantify this is to calculate the condition probability of word j appearing in a document given that word i appears in the document. By the definition of conditional probability, this is equal to the total number of documents in which words i and j coappear divided by the total number of documents in which word i appears. To calculate the topic coherence of a single topic, the log of these conditional probabilities is computed for all pairs of word i and j among the M most probable words in the given topic, and these calculations are summed together. </p>
 
-              <img class="center" src="images/CoherenceFormula.png" width="600" height="80">
+              <img class="diagram" src="images/CoherenceFormula.png" width="600" height="80">
 
             <p class="section_paragraph">
               Finally, because there are multiple topics, this whole procedure is repeated for all T topics and the average of these topic coherences is taken to be the overall topic coherence measurement. The CGS algorithm has converged to the true posterior distribution when this topic coherence metric doesn't significantly change between consecutive iterations.
@@ -147,8 +147,8 @@
               This serial implementation has been tested on a sample of approximately 2,000 news articles. The top words of two topics are listed below and a plot the overall topic coherence is plotted over number of iterations of the CGS.
           </p>
 
-            <img class="center" src="images/SerialTopics.png" >
-            <img class="center" src="images/CoherencePlot.png" width="400" height="400" >
+            <img class="diagram_large" src="images/SerialTopics.png" >
+            <img class="diagram_small" src="images/CoherencePlot.png" width="400" height="400" >
 
         <p class="section_paragraph">
               Clearly, the algorithm is able to group a set of words that make intuitive sense in the context of one particular topic. In this case, the topic on the left seems to be centered around the theme of the stock market, while the one on the right relates to South-African politics. The plot further shows how the CGS algortihm converges towards a constant value for the average topic coherence.
@@ -170,7 +170,7 @@
 
 
               <p class="section_paragraph">
-                  While the serial version of CGS described above is straightforward to implement, it scales linearly with the number of documents in the corpus. This means that performing LDA on a relatively large number of documents is very computationally expensive. To get a sense of this computational cost, we implemented this serial version of LDA in Python and applied it to a toy dataset of approximately 2,250 Associated Press articles (these articles can be found here: http://www.cs.columbia.edu/~blei/lda-c/). The algorithm converged after 8 iterations and took 324 seconds to run. Assuming it would take the same number of iterations to converge, this level of performance means that it would take many hours to run LDA on a more realistic corpus that contains tens of thousands, hundreds of thousands or even millions of documents.</p>
+                  While the serial version of CGS described above is straightforward to implement, it scales linearly with the number of documents in the corpus. This means that performing LDA on a relatively large number of documents is very computationally expensive. To get a sense of this computational cost, we implemented this serial version of LDA in Python and applied it to a toy dataset of approximately 2,250 Associated Press articles (these articles can be found <a href="http://www.cs.columbia.edu/~blei/lda-c/">here</a>.). The algorithm converged after 8 iterations and took 324 seconds to run. Assuming it would take the same number of iterations to converge, this level of performance means that it would take many hours to run LDA on a more realistic corpus that contains tens of thousands, hundreds of thousands or even millions of documents.</p>
 
                 <p class="section_paragraph">
                   Therefore, we sought to parallelize this algorithm by applying the big compute tools of MPI and OpenMP. We wrote our implementation in Cython because Python's GIL prevents multithreading, which is needed to run OpenMP. An added benefit of using Cython over Python is that Cython is compiled down to C rather than interpreted, which gave us an automatic boost in performance.</p>
@@ -214,21 +214,21 @@
           <h2>Parallel Implementation & Performance</h2>
 
 
-    <!-- #########################################################  SUBSECTION ############################################################################-->
+            <!-- #########################################################  SUBSECTION ############################################################################-->
             <h3>Overview</h3>
 
                 <p class="section_paragraph">
                 The following figure illustrates the overall parallelization scheme that will be implemented. First, we'll use Achache Spark to preprocess the large PATENT dataset, run on multiple nodes withing an EMR cluster. Once the data is correclty preprocessed, we distribute the results over multiple nodes in our cluster. These nodes will then sample with the Gibbs Sampling algorithm, and communicate the intermediate results to one another using MPI. Within each node, we can achieve further speedup by leveraging OpenMP.
                 </p>
 
-                <img class="diagram" src="images/parallelization_design_diagram.png">
+                <img class="diagram_large" src="images/parallelization_design_diagram.png">
 
                  <p class="section_paragraph">
                 The next paragraphs will further elaborate on the detailed implementation of the Spark preprocessing, MPI and OpenMP. </p>
 
 
-  <!-- #########################################################  SUBSECTION ############################################################################-->
-        <h3>Document Pre-Processing</h3>
+          <!-- #########################################################  SUBSECTION ############################################################################-->
+          <h3>Document Pre-Processing</h3>
 
           <p class="section_paragraph">
             As outlined above, the first step of the implementation was to download the patents documents, preprocess them and convert them to a format that could easily be ingested by the parallelized CGS algorithm. Each patent document came in the following format: </p>
@@ -261,8 +261,8 @@
             For the cluster, we chose m4.xlarge EC2 instances for both the master node as the worker nodes.  Each of these have 4 vCPUs, which enables us to parallelize both on the node as on the core level. Different experiments have been run, using multiple nodes and cores, in order to evaluate the achieved speed-up. The following table and plot summarize the results:</p>
 
 
-            <img class="center" src="images/SparkTable.png" width="400" height="150">
-            <img class="center" src="images/SparkSpeedupplot.png" width="400" height="400">
+            <img class="diagram_small" src="images/SparkTable.png" width="400" height="150">
+            <img class="diagram_small" src="images/SparkSpeedupplot.png" width="400" height="400">
 
             <p class="section_paragraph">
             Clearly, the Spark implementation of the patent preprocessing performs well. For an increasing total number of cores used in the parallelization, the speed-up increases and gets reasonably close to the maximal theoretical speed-up. Note that the curve will plateau for increasing number of cores, as the additional overhead cost will become relatively larger compared to the computational gain of an additional core. Using 8 worker nodes and 2 cores per node, the algortihm was eventually able to achieve a speed-up of approximately 12, while the theoretical is 16. As such, the runtime has been reduced to a reasonable 29 mins. </p>
