@@ -257,7 +257,7 @@ cdef class LDA:
                 (self.mpi_rank - 1) % self.mpi_size, 0,
                 self.mpi_comm, mpi.MPI_STATUS_IGNORE
             )
-            new_split = (self.current_tokens[2] + 1) % self.mpi_size
+            new_split = (self.current_tokens[2] - 1) % self.mpi_size
             self.current_tokens = (
                 self.size_vocab * new_split // self.mpi_size,
                 self.size_vocab * (new_split + 1) // self.mpi_size,
