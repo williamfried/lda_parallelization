@@ -225,11 +225,14 @@
             
             The serial implementation of this preprocessing for the considered dataset was estimated to take multiple hours. As such, we decided to develop a parallel version using Apache Spark and run it on an EMR cluster on AWS. First, the files needed were uploaded to an S3 bucket, after which they were added to the Hadoop file system within the cluster. The I/O-commands and RDD operations needed for the preprocessing could then easily be implemented using PySpark. 
             
-            For the cluster, we chose m4.xlarge EC2 instances for both the master node as the worker nodes.  Each of these have 4 vCPUs, which enables us to parallelize both on the node as on the core level. Different experiments have been run, using multiple nodes and cores, in order to evaluate the achieved speed-up. The following table summarizes the results:
-            
-            ***DISCUSS SPEEDUP
-            
-            </p>
+            For the cluster, we chose m4.xlarge EC2 instances for both the master node as the worker nodes.  Each of these have 4 vCPUs, which enables us to parallelize both on the node as on the core level. Different experiments have been run, using multiple nodes and cores, in order to evaluate the achieved speed-up. The following table and plot summarize the results:</p>
+          
+          
+            <img class="center" src="images/SparkTable.png" width="400" height="150">
+            <img class="center" src="images/SparkSpeedupplot.png" width="400" height="400">
+          
+            <p class="section_paragraph">
+            Clearly, the Spark implementation of the patent preprocessing performs well. For an increasing total number of cores used in the parallelization, the speed-up increases and gets reasonably close to the maximal theoretical speed-up. Note that the curve will plateau for increasing number of cores, as the additional overhead cost will become relatively larger compared to the computational gain of an additional core. Using 8 worker nodes and 2 cores per node, the algortihm was eventually able to achieve a speed-up of approximately 12, while the theoretical is 16. As such, the runtime has been reduced to a reasonable 29 mins. </p>
         </div>
       </div>
     </div>
