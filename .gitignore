@@ -1,1 +1,13 @@
 cs205env/*
+build/
+*.so
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+*~
+\#*\#
+.idea/
+.DS_Store
+lda_cython/patents/*
+lda_cython/results/*
