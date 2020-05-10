@@ -63,7 +63,7 @@ cdef class LDA:
     cdef double[:, ::1] pmf
 
     def __init__(self, file_path, num_topics, alpha, beta, size_vocab,
-                 size_corpus, num_threads=1, seed=205):
+                 size_corpus, num_threads=1, seed=205, shuffle_words=False):
         """See {__cinit__}"""
         pass
 
