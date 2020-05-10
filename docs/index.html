@@ -42,6 +42,9 @@
           <li class="nav-item">
             <a class="nav-link js-scroll-trigger" href="#serial">Serial Implementation</a>
           </li>
+        <li class="nav-item">
+            <a class="nav-link js-scroll-trigger" href="#need">Need for HPC & Big Data</a>
+          </li>
           <li class="nav-item">
             <a class="nav-link js-scroll-trigger" href="#paralleloverview">Parallel Approach</a>
           </li>
@@ -79,12 +82,12 @@
                 <li>It weighs the contribution of each topic to the content of each document.</li>
             </ul>
               
-            The figure below illustrates how LDA results in a topic distribution for each document. To the right, we show a list of 20 words that we have found associated with a selected topic in the distribution. Clearly, the results make sense, as all words displayed are thematically related––in this case, the stock market. </p>
+            The figure below illustrates how LDA results in a topic distribution for each document. To the right, we show a list of 20 words that we have found associated with a selected topic in the distribution. Clearly, the results make sense, as all words displayed are thematically related––in this case, the stock market.  Because LDA is so widely used and well documented, we omit the details of the generative model. </p>
 
           <img class="diagram" src="images/lda_diagram.png">
 
           <p class="section_paragraph">
-              In this project, we developed a parallelized version of LDA and apply it to Stanford's DeepDive Google PATENT dataset (<a href = http://deepdive.stanford.edu/opendata>link</a>). It contains over 2 Million patents issued in the United States since 1920. We believe that topic distribution is naturally present in a large corpus of patents and are therefore convinced that LDA can lead to meaningful and useful results. Given the size of the dataset we will consider and the fact that computational complexity increases with the number of documents, it is definitely interesting to explore parallelization techniques.               
+              In this project, we developed a parallelized version of LDA and apply it to Stanford's DeepDive Google PATENT dataset (<a href = http://deepdive.stanford.edu/opendata>link</a>). It contains over 2.5 Million patents issued in the United States since 1920. We believe that topic distribution is naturally present in a large corpus of patents and are therefore convinced that LDA can lead to meaningful and useful results. Given the size of the dataset we will consider and the fact that the computational complexity of the algorithm increases with the number of documents, it is definitely interesting to explore parallelization techniques.               
           </p>
 
         </div>
@@ -98,10 +101,10 @@
         <div class="col-lg-12">
           <h2 style="padding-top:40px">Inference for LDA</h2>
           <p class="section_paragraph">
-              There are several inference procedures to infer the distribution of words per topic and the distribution of topics per document. The two most common approaches are variational Bayesian inference and collapsed Gibbs sampling. For this project, we focused on parallelizing the collapsed Gibbs sampling algorithm (CGS). CGS works as follows: first, each word in each of the documents is randomly assigned to one of the T topics. After this initialization step, the first iteration of CGS is performed where each word in the corpus is reassigned to a new topic. For an arbitrary word w in document j, this is achieved by sampling from the a categorical distribution, where the unnormalized weight associated with each topic T is:
+              There are several inference procedures to infer the distribution of words per topic and the distribution of topics per document. The two most common approaches are variational Bayesian inference and collapsed Gibbs sampling. For this project, we focused on parallelizing the collapsed Gibbs sampling algorithm (CGS). CGS works as follows: first, each word in each of the documents is randomly assigned to one of the T topics. After this initialization step, the first iteration of CGS is performed where each word in the corpus is reassigned to a new topic. For an arbitrary word w in document j, this is achieved by sampling from the a categorical distribution, where the unnormalized weight associated with each topic T is:</p>
               
               FORMULA
-              
+          <p class="section_paragraph">
               where n_doc represents the number of words in document d assigned to topic T, n_word represents the number of times word w is assigned to topic T across all documents and n_all represents the number of words in the corpus that are assigned to topic T. 
               
               These iterations are performed indefinitely until the algorithm converges. 
@@ -123,7 +126,7 @@
 
               where t_doc represents the total number of topics assigned in document d. 
 
-              Based on the properties of the Dirichlet distribution, the probability of the c-th category is proportional to the c-th parameter. This means that the most common words associated with a topic and the most common topics associated with a document are those that have the highest corresponding Dirichlet parameter. 
+              Based on the properties of the Dirichlet distribution, the probability of the c-th category is proportional to the c-th parameter. This means that the most common words associated with a topic and the most common topics associated with a document are those that have the highest corresponding Dirichlet parameters. 
 
           </p>
 
@@ -141,10 +144,10 @@
               
 
           <p class="section_paragraph">
-              The serial version of CGS, where one process is assigned all of the documents, follows naturally from the general procedure described above. First, the three counts described above are initialized to zero. The next step involves iterating over each document in the corpus and over every word in each document and randomly assigns each word to one of the T topics specified by the caller. After word w is assigned to topic T in document d, the three corresponding counts are incremented by one; namely, the number of words in document d that are assigned to topic T, the number of times that word w is assigned to topic T across all documents, and the number of words assigned to topic T across all documents. Overall, the time complexity of this initialization step is O(d\*w) where d represents the number of documents in the corpus, and w represents the average number of words per document. </p>
+              The serial version of CGS, where one process is assigned all of the documents, follows naturally from the general procedure described above. First, the three counts described above are initialized to zero. The next step involves iterating over each document in the corpus and over every word in each document and randomly assigns each word to one of the T topics specified by the caller. After word w is assigned to topic t in document d, the three corresponding counts are incremented by one; namely, the number of words in document d that are assigned to topic t, the number of times that word w is assigned to topic t across all documents, and the number of words assigned to topic t across all documents. Overall, the time complexity of this initialization step is O(d\*w) where d represents the number of documents in the corpus, and w represents the average number of words per document. </p>
               
             <p class="section_paragraph">
-              At this point, we're ready to begin performing CGS. Just as with the initialization step, this involves iterating over each word in each document. The process of reassigning word w in document d that was previously assigned to topic T_old consists of three parts. First, word w is unassigned from topic T_old, which is represented by decrementing the three relevant counts. Next, the unnormalized weight is determined for each of the T topics by calculating the expression defined above, and a random topic, T_new, is sampled from the resulting categorical distribution. Finally, word w is assigned to topic T_new, which is represented by incrementing the three relevant counts. After each iteration, the topic coherence metric described above is calculated and compared to the value of the previous iteration. Just as with the initialization step, because each iteration involves looping through each word in the corpus, the time complexity of each iteration is O(d*w), which means that the time complexity of the algorithm as a whole is also O(d*w).
+              At this point, we're ready to begin performing CGS. Just as with the initialization step, this involves iterating over each word in each document. The process of reassigning word w in document d that was previously assigned to topic t_old consists of three parts. First, word w is unassigned from topic t_old, which is represented by decrementing the three relevant counts. Next, the unnormalized weight is determined for each of the T topics by calculating the expression defined above, and a random topic, t_new, is sampled from the resulting categorical distribution. Finally, word w is assigned to topic t_new, which is represented by incrementing the three relevant counts. After each iteration, the topic coherence metric described above is calculated and compared to the value of the previous iteration. Just as with the initialization step, because each iteration involves looping through each word in the corpus, the time complexity of each iteration is O(d\*w).
           </p>
             
           <p class="section_paragraph">
@@ -163,6 +166,29 @@
     </div>
   </section>
     
+    <section id="need">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-12">
+          <h2 style="padding-top:40px">Need for HPC & Big Data</h2>
+          <p class="section_paragraph">
+              
+
+          <p class="section_paragraph">
+              While the serial version of CGS described above is straightforward to implement, it scales linearly with the number of documents in the corpus. This means that performing LDA on a relatively large number of documents is very computationally expensive. To get a sense of this computational cost, we implemented this serial version of LDA in Python and applied it to a toy dataset of approximately 2,250 Associated Press articles (these articles can be found here: http://www.cs.columbia.edu/~blei/lda-c/). The algorithm converged after 10 iterations and took 380 seconds to run. Assuming it would take the same number of iterations to converge, this level of performance means that it would take many hours to run LDA on a more realistic corpus that contains tens of thousands, hundreds of thousands or even millions of documents.</p>
+              
+            <p class="section_paragraph">
+              Therefore, we sought to parallelize this algorithm by applying the big compute tools of MPI and OpenMP. We wrote our implementation in Cython because Python's GIL prevents multithreading, which is needed to run OpenMP. An added benefit of using Cython over Python is that Cython is compiled down to C rather than interpreted, which gave us an automatic boost in performance.</p>
+            
+            <p class="section_paragraph">
+              We applied our parallelized version of CGS to Stanford's DeepDive patent corpus (accessible here: http://deepdive.stanford.edu/opendata/), which contains almost 2.5 million patent grants submitted to the United States Patent and Trademark Office since 1920. For our project, we used roughly 383,000 of these patent documents. Because each patent document needs to be preprocessed before being fed into the CGS algorithm, this presents a big data problem, as it would be very time consuming to process one document at a time. Therefore, we used Spark to preprocess the patent documents in parallel. </p>
+            
+        </div>
+      </div>
+    </div>
+  </section>
+    
+    
     <section id="paralleloverview">
     <div class="container">
       <div class="row">
@@ -172,30 +198,26 @@
               
 
           <p class="section_paragraph">
-              It's not trivial to parallelize the CGS algorithm. This is the case because the categorical distribution that is used to reassign each word depends on the three count values that are constantly changing as words are being processed. In other words, setting up the proper categorical distribution depends on knowing the topic assignment of others word in the corpus at the given time. However, all hope is not lost because setting up the categorical distribution depends on knowing only a subset of the topic assignments of the other word in the corpus. Therefore, our goal is to find a way to reassign multiple words at the same time such that the topic assignments of one of these words doesn't affect, or only slightly affects, the topic assignments of the other words. Because each word assignment relies on the document-specific, word-specific and topic-specific counts, each of these counts must be thought about separately.</p>
+              Parallelizing the CGS algorithm is not a trivial task. This is the case because the categorical distribution that is used to reassign each word depends on the three count values that are constantly changing as words are being processed. In other words, setting up the proper categorical distribution depends on knowing the topic assignment of others words in the corpus at the given time. However, all hope is not lost because setting up the categorical distribution depends on knowing only a subset of the topic assignments of the other word in the corpus. Therefore, our goal is to find a way to reassign multiple words at the same time such that the topic assignment of one of these words doesn't affect, or only slightly affects, the topic assignments of the other words. Because each word assignment relies on the document-assignment (n_doc), word-assignment (n_word) and topic-assignment (n_all) counts, each of these counts must be dealt with properly.</p>
               
             <p class="section_paragraph">
-              Of the three counts, the document-specific count is the easiest to handle. If we ensure that no two words from the same document are reassigned at the same time, then the document-specific count corresponding to each word will be independent of each other. We can easily achieve this by allocating multiple nodes a subset of the total number of documents in the corpus, such that each document is completely owned by one of the nodes. This guarantees that when a node reassigns a word in a given document, it has access to the precise document-specific count. </p>
+              Of the three counts, the document-assignment count is the easiest to handle. If we ensure that no two words from the same document are reassigned at the same time, then the document-assignment count corresponding to each word will be independent of each other. We can easily achieve this by assigning a subset of the documents in the corpus to multiple nodes, such that each document is completely owned by one of the nodes. This guarantees that when a node reassigns a word in a given document, it has access to the exact document-assignment count and doesn't conflict with any of the other nodes. </p>
             
             <p class="section_paragraph">
-              Dealing with the word-specific count is more complicated. The issue is that if multiple nodes reassign multiple occurrences of a given word in the corpus, then the word-specific count will be different across the nodes. Therefore, we must find a way to ensure that only one node is processing a given word in the vocabulary at any one time. This can be achieved by creating a tuple for each word that contains the word itself (e.g. 'invention') and its associated count. Next, we enforce a system where only the node that possesses the tuple for word w has permission to reassign word w (just as a student in elementary school needs to be in possession of a bathroom pass to walk in the hallways). Because there is only one tuple for each word in circulation, this guarantees that no two nodes simultaneously reassign the same word. Now of course each node most likely has documents that contain a given word in the vocabulary, which means that each node must periodically be in possession of each of these tuples.  </p>
+              Dealing with the word-assignment count is more complicated. The issue is that if multiple nodes reassign multiple occurrences of a given word in the corpus, then the word-assignment count will be different across the nodes. Therefore, we must find a way to ensure that only one node can process a given word in the vocabulary at any one time. This can be achieved by creating a tuple for each word that contains the word itself (e.g. 'invention') and its associated count. Next, we enforce a system where only the node that possesses the tuple for word w has permission to reassign word w (just as a student in elementary school needs to possess a bathroom pass to walk in the hallways during class). Because there is only one tuple for each word in circulation, this guarantees that no two nodes can simultaneously reassign the same word. Of course, each node most likely has documents that contain a given word in the vocabulary, which means that each node must periodically be in possession of each of these tuples.  </p>
             
             <p class="section_paragraph">
-                This can be achieved as follows: upon initialization, each node is assigned an equal portion of the tuples, such that the workload is spread out as evenly as possible. (While the workload associated with each tuple is proportional to the frequency of the associated word in the corpus, the law of large numbers guarantees that the high-frequency and low-frequency words will balance out such that the workload is roughly the same for each of the nodes.) These tuples are then placed in a queue, which is a first in, first out data structure. Each node then pops the first tuple off of its queue and processes it by reassigning each occurance of the given word across the documents allotted to it and updating the word-specific count to reflect these reassignments. Once this has been completed, each node passes off this updated tuple to the next node (e.g. node 0 to 1, 1 to 2, 2 to 3, 3 to 0), which proceeds to push this tuple onto its own queue. This next node now has the exact word-specific count needed to properly reassign the occurrences of the word in its document. Each node is now free to pop the next tuple off of its queue and repeat the same procedure. 
+                This can be achieved as follows: upon initialization, each node is assigned an equal portion of the tuples, such that the workload is spread out as evenly as possible. (While the workload associated with each tuple is proportional to the frequency of the associated word in the corpus, the law of large numbers guarantees that the high-frequency and low-frequency words will balance out such that the workload is roughly the same for each of the nodes.) These tuples are then placed in a queue, which is a first in, first out data structure. Each node then pops the first tuple off of its queue and processes it by reassigning each occurance of the given word across the documents allotted to it and updating the word-assignment count to reflect these reassignments. Once this has been completed, each node passes off this updated tuple to the next node (e.g. node 0 to 1, 1 to 2, 2 to 3, 3 to 0), which, in turn, proceeds to push this tuple onto its own queue. This next node now has the exact word-assignment count needed to properly reassign the occurrences of the word in its document. Each node is now free to pop the next tuple off of its queue and repeat the same procedure. 
               </p>
 
             <p class="section_paragraph">
-                Finally, we need to handle the topic-specific count. At first this may seem like a futile proposition because every single word that is reassigned modifies the topic-specific count, which means it would be impossible for each node to have an accurate topic-specific count. However, all hope is not lost because CGS is a Markov Chain Monte Carlo algorithm, so we only need to converge to the same posterior distribution. This means that even if each node only has access to an approximate topic-specific count, the sampling will still converge, albeit a little slower, as long as the count is updated periodically. 
+                Finally, we need to handle the topic-assignment count. At first this may seem like a futile proposition because every single word that is reassigned modifies the topic-assignment count, which means it would be impossible for each node to have an accurate topic-assignment count. However, all hope is not lost because CGS is a Markov Chain Monte Carlo algorithm, so we only need to converge to the same posterior distribution. This means that even if each node only has access to an approximate topic-assignment count, the sampling will still converge, albeit a little slower, as long as the count is updated periodically. (The fact that the topic-assignment count for each topic is large (on average the total number of words in the corpus divided by T, the number of topics), coupled with the fact that this count generally doesn't change dramatically from iteration to iteration means that the approximate categorical distribution set up by each node should differ only minimally from the optimal categorical distribution that is used in the serial implementation.)
               </p>
             
             <p class="section_paragraph">
-            The following figure illustrates the overall parallelization scheme that will be implemented. First, we'll use Achache Spark to preprocess the large PATENT dataset, run on multiple nodes withing an EMR cluster. Once the data is correclty preprocessed, we distribute the results over multiple nodes in our cluster. These nodes will then sample with the Gibbs Sampling algorithm, and communicate the intermediate results to one another using MPI. Within each node, we can achieve further speedup by leveraging OpenMP. 
-            </p>
+                The updating scheme works as follows: during initialization, each node randomly assigns the words in its alloted documents. Next, the topic-assignment counts of each node are summed together to produce an overall topic-assignment count that reflects the topic assignment of each word in the corpus. This global topic-assignment count is then disseminated to each of the nodes. The nodes do not modify this count, as it serves as a snapshot of what the global topic-assignment count is at the beginning of the iteration. Instead, each node creates a new data structure that maps each topic to the change in the number of words assigned to the given topic, and initializes these counts to zero. When the iteration begins and words are reassigned, the node increments and decrements these counts as appropriate, such that at the end of the iteration this mapping reflects the net change in the topic assignments of the words in the node's alloted documents (e.g. if 10 words were assigned to topic 1 at the beginning of the iteration and 5 of these words were reassigned to topic 2 while 3 words that were initially assigned to topic 2 were reassigned to topic 1, then the net change would be -5 + 3 = -2 for topic 1 and 5 - 3 = 2 for topic 2). Once the iteration is complete, this net change count is summed across all the nodes. The resulting count represents the net change in the topic assignments across the entire corpus, and is broadcasted to each of the nodes. Next, each node adds this count to the unchanged topic-assignment count, which now serves as an updated snapshot of the global topic-assignment count. Finally, the net change count is reset to zero in preparation for the next iteration. 
+              </p>
             
-            <img class="diagram" src="images/parallelization_design_diagram.png">
-            
-             <p class="section_paragraph">
-            The next paragraphs will further elaborate on the detailed implementation of the Spark preprossing, MPI and OpenMP. </p>
         </div>
       </div>
     </div>
@@ -206,13 +228,34 @@
       <div class="row">
         <div class="col-lg-12">
           <h2>Parallel Impementation & Performance</h2>
+            
+            <p class="section_paragraph">
+            The following figure illustrates the overall parallelization scheme that will be implemented. First, we'll use Achache Spark to preprocess the large PATENT dataset, run on multiple nodes withing an EMR cluster. Once the data is correclty preprocessed, we distribute the results over multiple nodes in our cluster. These nodes will then sample with the Gibbs Sampling algorithm, and communicate the intermediate results to one another using MPI. Within each node, we can achieve further speedup by leveraging OpenMP. 
+            </p>
+            
+            <img class="diagram" src="images/parallelization_design_diagram.png">
+            
+             <p class="section_paragraph">
+            The next paragraphs will further elaborate on the detailed implementation of the Spark preprossing, MPI and OpenMP. </p>
+            
+            <h3>Preprocessing</h3>
+            
           <p class="section_paragraph">
-            As outlined in the project design, the first step in the parallelization of LDA in this project will be the preprocessing of the documents using Spark. Recall that we chose to use the Google PATENT dataset (publicly available from Stanford DeepDive) as input. The entire dataset (428 GB) contains over 2 Million patent grants issued in the US since 1920. For the purpose of this project, only a subset of around 500,000 documents has been used. Given that the computational complexity of the LDA algorithm is proportional to the number of documents, we decided that this was enough to justify the need for parallel processing and would clearly illustrate the impact of our parallelization efforts. 
-              
-            The patents are given as NLP files spread over multiple folders. The Spark pipeline will need to process this raw input to the exact input format as required by the CGS algorithm. More specifically, it needs to:
+            As outlined above the The first step of the implementation was to download the patents documents, preprocess them and convert them to a format that could easily be ingested by the parallelized CGS algorithm. Each patent document came in the following format: </p>
+            
+            <p class="section_paragraph">             
+              As shown above, the actual words of the patent are listed in the second column, while the rest of the columns contain additional information that may be useful to other natural language processing tasks. (Most of these patent documents were written before the advent of modern computers, so the majority of them are transcribed using optical character recognition software. As a result, some of the words were transcribed incorrectly (e.g. a double-u would be transcribed as two vees)). Thus, the first step was to extract these words from the patent documents. Our goal was to write the sequence of words in each patent document as a separate line in a text file, as this format would allow us to easily create an RDD using SparkContext’s textFile method. We used Python's multiprocessing module to speed up this process. 
+            </p>
+            
+            <p class="section_paragraph">             
+              Because multiple workers can't write to a file at the same time, we couldn't simply use the mp.Pool().map function to process each patent document independently. Instead, we created the following setup: first, we set up a queue using the multiprocessing Manager, such that the workers could communicate with each other. Then, we tasked one of the workers in the pool with constantly monitoring this queue and writing each element as a new line in a text file (this was accomplished using the apply_async method). Next, we called the starmap method to pass each patent document along with a reference to the queue to each of the remaining workers in parallel. To process a given patent document, each of these workers iterated through the lines and extracted the word on the first column. It then converted the word to lowercase, removed any special characters such as dashes and punctuation marks, and ignored any words that were stopwords (as defined by the natural language toolkit library), consisted of fewer than four characters or contained any numeric characters. The requirement for each word to be at least four characters long was added because many of the words that were misread by the OCR software contained three or fewer characters and were inscrutable. All the surviving words were then concatenated into one long string and pushed onto the queue, so that they could be written to the text file. We then uploaded this text file to an AWS S3 bucket for further processing.
+            </p>
+            
+            <p class="section_paragraph">    
+             After all the relevant words from patent corpus have been aggregated in one text file, Apache Spark can be used to finalize the preprocessing. More specifcally, the Spark pipeline will need to execute the following:
               
             <ul>
-                <li>Read in all the words over all the patents and filter out the stopwords, small words or special characters.</li>
+                <li>Read in all the words over all the patents.</li>
                 <li>Count all the occurences of each word per document.</li>
                 <li>Aggregate all the filtered words and compose the vocabulary to be considered by the algorithm. In this step, a minimum of total number of occurences of a word over all documents and a minimum individual document occurences will be applied to all words. As such, a coherent topic distribution can be reached.</li>
                 <li>Write two main outputs:
@@ -223,7 +266,7 @@
                 </li>
             </ul>
             
-            The serial implementation of this preprocessing for the considered dataset was estimated to take multiple hours. As such, we decided to develop a parallel version using Apache Spark and run it on an EMR cluster on AWS. First, the files needed were uploaded to an S3 bucket, after which they were added to the Hadoop file system within the cluster. The I/O-commands and RDD operations needed for the preprocessing could then easily be implemented using PySpark. 
+            The serial implementation of this preprocessing for the considered dataset was estimated to take multiple hours. As such, it made sense to develop a parallel version using Apache Spark and run it on an EMR cluster on AWS. First, the large text file was uploaded to an S3 bucket, after which they were added to the Hadoop file system within the cluster. The I/O-commands and RDD operations needed for the preprocessing could then easily be implemented using PySpark. 
             
             For the cluster, we chose m4.xlarge EC2 instances for both the master node as the worker nodes.  Each of these have 4 vCPUs, which enables us to parallelize both on the node as on the core level. Different experiments have been run, using multiple nodes and cores, in order to evaluate the achieved speed-up. The following table and plot summarize the results:</p>
           
@@ -233,6 +276,63 @@
           
             <p class="section_paragraph">
             Clearly, the Spark implementation of the patent preprocessing performs well. For an increasing total number of cores used in the parallelization, the speed-up increases and gets reasonably close to the maximal theoretical speed-up. Note that the curve will plateau for increasing number of cores, as the additional overhead cost will become relatively larger compared to the computational gain of an additional core. Using 8 worker nodes and 2 cores per node, the algortihm was eventually able to achieve a speed-up of approximately 12, while the theoretical is 16. As such, the runtime has been reduced to a reasonable 29 mins. </p>
+          
+          <h3>Parallel CGS Implementation</h3>
+          <p class="section_paragraph">
+          We implemented the parallel approach outlined above using a combination of MPI and OpenMP. As explained in the section on the serial implementation, the vanilla CGS algorithm has a time complexity of O(d\*w) because it involves iterating over every document in the corpus and every word in each document. The purpose of using MPI was to parallelize the processing of the documents, while the purpose of using OpenMP was to parallelize the processing of the words. Because each of these tools was used to parallelize a different part of the CGS algorithm, they are orthogonal to one another and can be discussed separately. </p>
+          
+          <h4>MPI</h4>
+          
+          <p class="section_paragraph">
+              First, each node reads in an equal number of the partitions outputted by the spark program. Because there are 40 partitions in total, this means that two nodes would each read in 20 partitions, four nodes would each read in 10 partitions, etc. Next, each node initializes its document-assignment count and its local word-assignment and topic-assignment counts to zero. Next, an outer loop iterates through each document d and an inner loop iterates through each word w that appears at least one time in the given document. In this inner loop, each occurrence of word w is randomly assigned to one of the topics and the counts are updated accordingly. Additionally, each node keeps track of the fact that document d contains the word w. This saves time later on when the nodes process the word tuples, as they can jump immediately to the relevant documents rather than having to check every document to see if the given word appears in it. </p>
+
+          <p class="section_paragraph">
+              After this nested loop is completed, the nodes need to communicate with each other how they assigned each of the words in their respective documents. First, each node needs access to the global topic-assignment count. This is achieved by calling the MPI_Allreduce function with the MPI_SUM operation, which adds up each node's local topic-assignment count and returns a copy of the resulting count to each of the nodes. Secondly, in preparation of the first iteration, each node requires a queue of word tokens. This is accomplished by splitting up the vocabulary size into N equally sized chunks, where N is the number of nodes. For the nth chunk of words, the MPI_reduce function is called with the MPI_SUM operation. This adds up each node's local word-assignment counts for the relevant words and returns the resulting count to the nth node. At this point, the initialization step has been completed and the first iteration is ready to begin. Note: each iteration is composed of N mini-iterations, where a mini-iteration involves processing all the tuples in the queue, such that each node processes every word in the vocabulary once per iteration. </p>
+            
+          <p class="section_paragraph">
+              As explained above in the parallel approach section, each node pops a tuple off of its queue, processes the word and then sends an updated tuple to the next node. However, there are two major drawbacks to this approach. First, sending and receiving each individual tuple would result in a large overhead cost. And second, while this approach would initially work, the algorithm would eventually run into issues as the size of the various queues would become increasingly unbalanced to the point where some nodes have very few tuples while others are swamped with many more than they were initially expected to have. Beyond slowing things down, this lack of coordination could eventually lead to a deadlocking situation that prevents the algorithm from running at all. </p>
+          
+          <p class="section_paragraph">
+              Fortunately, upon receiving a tuple, the next node would simply push it onto its own queue. This means the node doesn't need immediate access to this tuple. Therefore, a more efficient approach would be for each node to process multiple tuples and then send this batch of tuples (e.g. every tength of the number of tuples initially in the queue) over to the next node. However, while this approach would undoubtedly reduce the communication overhead, it would still lead to workload imbalance issues and deadlocking. (We know this from experience as we initially tried this approach and encountered a lot of issues stemming from the lack of synchronization among the nodes.)</p>
+          
+          <p class="section_paragraph">
+              It turns out that the optimal communication protocol is also the simplest. Rather than sending individual tuples or batches of tuples to the adjacent node throughout each mini-iteration, the best strategy is to send only one batch of tuples when the mini-iteration is over. That is, after processing each tuple, the nodes simply pushes the updated tuple to a different queue, such that at the end of each mini-iteration, this second queue contains all the tuples that started off in the primary queue. At this point, the MPI_Sendrecv function is called, which, for each node, sends the queue of updated tuples to the node to the right and receives the next queue of tuples from the node to the left. (The MPI_Sendrecv function is equivalent to an MPI_Isend and an MPI_Irecv followed by an MPI_Wait for the MPI_Isend and a separate MPI_Wait for the MPI_Irecv.) </p>
+          
+        <p class="section_paragraph">
+            There are three advantages of this approach. First, it is much simpler than the other approaches as it doesn't require nodes to constantly call the MPI_Iprobe function to first check if the node to the left has sent a message, and, if a message has arrived, receive the tuples and push them to its queue. Second, this approach involves only one communication event per mini-iteration and thus minimizes the communication overhead. And finally, because the MPI_Sendrecv function is a blocking operation, each node cannot proceed until it has sent its queue off to the node to the right and received its new queue from the node to the left. This means that MPI_Sendrecv essentially serves the additional role of MPI_Barrier and ensures that all of the nodes are synchronized before starting the next mini-iteration. This, in turn, guarantees that there are no deadlocking conditions. </p>
+          
+          <p class="section_paragraph">
+              The last major detail about the MPI implementation for each mini-iteration is that immediately before the call to MPI_Sendrecv, the MPI_Allreduce function is called with the MPI_SUM operation. This adds the net change topic-assignment counts of each node and sends the result back to each of the nodes so they all have an updated view of the global topic-assignment count. These mini-iterations are carried out until a full iteration (i.e. N mini-iterations, where N is the number of nodes) has been completed. At this point, the topic coherence needs to be calculated to check if the CGS algorithm has converged to the posterior distribution. Because computing the topic coherence requires the posterior distribution of words for each topic, the word-assignment counts from each node needs to be gathered. </p>
+          
+          <p class="section_paragraph">RESULTS!!</p>
+
+          <h4>OpenMP</h4>
+          
+          <p class="section_paragraph">
+              While the MPI implementation is certainly more efficient than the serial implementation, it still has room for improvement. In particular, each node processes only one tuple at a time, while the rest of the tuples sit idly in the queue. This serial component of the algorithm presents a great opportunity for further parallelization. </p>
+
+          <p class="section_paragraph">
+              To exploit this, we use OpenMP to create multiple threads that each process a tuple at the same time. When a thread finishes processing a tuple, it simply pushes it to the second queue and pops the next tuple off of the primary queue. In Cython, this is achieved by calling the prange function, which takes in a range just as in Python, an argument that sets the number of threads, arguments that specify the schedule and chunksize and a nogil flag that needs to be set to True for OpenMP to run. Because the queue is implemented using a Numpy array, the range is simply the length of the array. Meanwhile, the optimal schedule is dynamic with a chunk size of 1, which allows each node to request the next tuple when it has completed processing the one at hand.</p>
+          
+          <p class="section_paragraph">
+              As usual, there is one main benefit and drawback of the dynamic scheduling system. The benefit is that once the final tuple is popped from the queue, the longest the node must wait is the time that it takes to process one word. This contrasts with static and guided scheduling, where the node may have to wait a significant amount of time for a subset of the threads to finish processing the tuples assigned to them, while the rest of the threads have finished their assigned tuples. However, the drawback is that the process of assigning each tuple to a thread has an associated overhead; because the number of assignments in dynamic scheduling is equal to the length of the queue (as opposed to, say, static scheduling where the number of assignments is equal to the number of threads, which is significantly lower than the length of the queue), it has the largest overhead cost out of the three scheduling systems. In this case, however, the number of assignments (i.e. on the order of hundreds of thousands or 10^5) is relatively small, especally compared to the problem in HWB where the number of iterations ranged from 10^6 to 10^8. This means that the benefit of dynamic scheduling of reduced idle time outweights the drawback of increased overhead. </p>
+          
+          <p class="section_paragraph">
+              Finally, we need to make sure that multiple threads don't access the same memory simultaneously. Because each thread processes a different word, there is no risk of a conflict for the word-assignment counts. However, at any given time, multiple threads may be reassigning words from the same document and are likely reassigning words to and from the same topic. This means that these threads may try to modify the document-assignment count and the topic-assignment count at the same time. To prevent this from happening, we insert a lock using omp_set_lock in two places: before the topic reassignment when the corresponding document-assignment count and topic-assignment count are decremented, and after the topic reassignment when the corresponding document-assignment count and topic-assignment count are incremented.</p>
+          
+          <h3>Discussion</h3>
+          
+          <p class="section_paragraph">
+              One major lesson we learned from this project is to keep the MPI approach as simple as possible and keep the nodes as synchronized as possible. As described in the implementation section, we initially tried to send batches of processed tuples to the next node in the middle of each mini-iteration. After each word was processed by a node, this involved checking if the number of processed tuples exceeded a predefined threshold (we used 25% of the length of the original queue). If this condition was satisfied, these processed tuples were sent to the node to the right as an array. On the flip side, before each word was processed by a node, this involved checking if the node to the left had sent a message. If this condition was met, the message was received and the resulting array was appended to the node's queue. When we tested this complicated implementation, it initially worked fine for the first five or so iterations -- each node was processing its queue at roughly the same pace and all the tuples were transferred successfully between nodes. </p>
+          
+          <p class="section_paragraph">
+              However, the algorithm slowly began to break down after this point, as minor discrepancies in the rate at which each node processed its tuples became more and more pronounced. Eventually this created an imbalance where one of the queues contained significantly more tuples than it was supposed to have, and the rest of the nodes had much shorter queues to process. This imbalance and inefficiency grew larger and larger as the rest of the nodes quickly processed their tuples and became idle, while the overwhelmed node had a harder and harder time keeping up. We then tried to prevent this imbalance from taking place by instructing any node whose queue was abnormally long to send the surplus tuples to the node to the right. However, this haphazard solution didn't end up helping. There were also other issues with this implementation that are too subtle to describe but were just as frustrating and difficult to resolve. </p>
+          
+          <p class="section_paragraph">
+              Eventually, we realized that there must be a better way to transfer tuples between the nodes. After taking a step back, it didn't take us long to come up with the simple strategy that we ended up using. In retrospect, we realized that MPI programs are supposed to be straightforward to the point where the programmer knows exactly what each node is doing at any given time and there is no complicated control flow logic involving MPI-related tasks. Otherwise, the programmer is likely to experience a cascade of issues that are very difficult to debug and are unpredictable because of the stochastic nature of synchronization problems. </p>
+
+          <p class="section_paragraph">In terms of future work, this is a pretty self-contained project so there are no natural follow-ups or extensions.</p>
+
         </div>
       </div>
     </div>

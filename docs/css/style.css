@@ -77,6 +77,10 @@ section {
   font-size: 15px;
 }
 
+.subsection_paragraph {
+  font-size: 10px;
+}
+
 .diagram {
   justify: center;
   max-width: 80%;
