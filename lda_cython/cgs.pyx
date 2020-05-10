@@ -123,7 +123,7 @@ cdef class LDA:
         self.assignment_ptr = \
             new vector[vector[vector[int]]](self.size_vocab)
 
-        cdef int token, doc, count
+        cdef int token, token_original, doc, count
         cdef str line
         cdef list line_split, occurrences
         with open(file_path) as file:
@@ -133,18 +133,24 @@ cdef class LDA:
                 iterline = map(int, iter(line_split[1:]))
                 # Not the most efficient because we already have iterator
                 # but much more readable
-                occurrences = [(self.token_permutation[i], next(iterline))
+                occurrences = [(i, next(iterline))
                                for i in iterline]
-                for token, count in occurrences:
-                    random_assignment = (
-                        self.num_topics * np_rng.random(count)
-                    ).astype(int)
-                    for i in random_assignment:
-                        temp_n_token[token, i] += 1
-                        self.n_doc[doc, i] += 1
-                        self.n_all[i] += 1
-                    self.assignment_ptr[0][token].push_back(random_assignment)
-                    self.assignment_ptr[0][token].back().push_back(doc)
+                # {token_original} is token_id from input file
+                # {token} is token index as far as code is concerned
+                for token_original, count in occurrences:
+                    if token_original < self.size_vocab:
+                        token = self.token_permutation[token_original]
+                        random_assignment = (
+                            self.num_topics * np_rng.random(count)
+                        ).astype(int)
+                        for i in random_assignment:
+                            temp_n_token[token, i] += 1
+                            self.n_doc[doc, i] += 1
+                            self.n_all[i] += 1
+                        self.assignment_ptr[0][token].push_back(
+                            random_assignment
+                        )
+                        self.assignment_ptr[0][token].back().push_back(doc)
         # Add up the {self.n_all} from the random assignments across nodes
         mpi.MPI_Allreduce(mpi.MPI_IN_PLACE, <void *> &self.n_all[0],
                           self.num_topics, mpi.MPI_INT, mpi.MPI_SUM,
