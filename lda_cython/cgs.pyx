@@ -192,7 +192,8 @@ cdef class LDA:
         for i in range(num_iterations * self.mpi_size):
             # Only look at the tokens that we have possession over
             for token in prange(self.current_tokens[0], self.current_tokens[1],
-                                nogil=True, num_threads=self.num_threads):
+                                nogil=True, num_threads=self.num_threads,
+                                schedule="dynamic"):
                 # {token_index} required to index into {self.n_token}
                 token_index = token - self.current_tokens[0]
                 for doc_index in range(self.assignment_ptr[0][token].size()):
