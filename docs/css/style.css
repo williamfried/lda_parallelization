@@ -50,6 +50,12 @@ section {
   background-color: white;
 }
 
+.row {
+  text-align: justify;
+  padding-left: 150px;
+  padding-right: 150px;
+}
+
 
 .title_text {
   font-weight: 800;
@@ -113,4 +119,16 @@ section {
     font-weight: 100;
 
   }
+
+}
+
+
+@media only screen and (max-width: 1000px) {
+
+  .row {
+    text-align: justify;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
 }
