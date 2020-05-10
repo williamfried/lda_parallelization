@@ -146,6 +146,17 @@
             <p class="section_paragraph">
               At this point, we're ready to begin performing CGS. Just as with the initialization step, this involves iterating over each word in each document. The process of reassigning word w in document d that was previously assigned to topic T_old consists of three parts. First, word w is unassigned from topic T_old, which is represented by decrementing the three relevant counts. Next, the unnormalized weight is determined for each of the T topics by calculating the expression defined above, and a random topic, T_new, is sampled from the resulting categorical distribution. Finally, word w is assigned to topic T_new, which is represented by incrementing the three relevant counts. After each iteration, the topic coherence metric described above is calculated and compared to the value of the previous iteration. Just as with the initialization step, because each iteration involves looping through each word in the corpus, the time complexity of each iteration is O(d*w), which means that the time complexity of the algorithm as a whole is also O(d*w).
           </p>
+            
+          <p class="section_paragraph">
+              This serial implementation has been tested on a sample of approximately 2,000 news articles. The top words of two topics are listed below and a plot the overall topic coherence is plotted over number of iterations of the CGS. 
+          </p>
+            
+            <img class="center" src="images/SerialTopics.png" >
+            <img class="center" src="images/CoherencePlot.png" width="400" height="400" >
+            
+        <p class="section_paragraph">
+              Clearly, the algorithm is able to group a set of words that make intuitive sense in the context of one particular topic. In this case, the topic on the left seems to be centered around the theme of the stock market, while the one on the right relates to South-African politics. The plot further shows how the CGS algortihm converges towards a constant value for the average topic coherence. 
+          </p>
 
         </div>
       </div>
