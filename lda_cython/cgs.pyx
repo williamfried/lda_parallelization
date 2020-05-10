@@ -14,6 +14,7 @@ from cython.parallel cimport prange
 # from mpi4py cimport MPI  # types for above python import
 from mpi4py cimport libmpi as mpi  # C API
 from libc.stdlib cimport malloc, calloc, free
+import re
 
 
 # Indicates that LDA is not subclassed;
@@ -30,6 +31,8 @@ cdef class LDA:
     # {n_token[token_index][topic]} contains corresponding counts
     # Last row may or may not be used; the first
     # {self.current_tokens[1] - self.current_tokens[0]} rows are valid
+    # Be careful! If constructed with shuffle, output is also shuffled.
+    # Use {self.get_inverse_permutation} to recover original token_id.
     cdef readonly int[:, ::1] n_token
     # {(start, stop, split_num)} that denote the rows of n_token
     # such that {token == token_index + start}
@@ -47,6 +50,9 @@ cdef class LDA:
     # to make sure that they don't get garbage collected
     cdef list rand_gens
     cdef vector[bitgen_t *] *bitgen_states_ptr
+    # Randomly shuffle the token orders so that
+    # {token == token_permutation[token_id_from_input]}
+    cdef readonly int[::1] token_permutation
     # Vector of locks, each corresponding to a topic
     cdef vector[omp_lock_t] *omp_locks_ptr
     cdef mpi.MPI_Comm mpi_comm
@@ -62,7 +68,7 @@ cdef class LDA:
         pass
 
     def __cinit__(self, file_path, num_topics, alpha, beta, size_vocab,
-                  size_corpus, num_threads=1, seed=205):
+                  size_corpus, num_threads=1, seed=205, shuffle_words=False):
         cdef int i
         self.num_topics = num_topics
         self.alpha = alpha
@@ -79,6 +85,13 @@ cdef class LDA:
             self.size_vocab * (self.mpi_rank + 1) // self.mpi_size,
             self.mpi_rank
         )
+
+        if not shuffle_words:
+            self.token_permutation = np.arange(self.size_vocab)
+        else:
+            # Unlike below, we want same randomness for each node
+            np.random.seed(seed)
+            self.token_permutation = np.random.permutation(self.size_vocab)
 
         # Set random seed
         seed_sequence = SeedSequence(seed).spawn(self.mpi_size)[self.mpi_rank]
@@ -113,10 +126,13 @@ cdef class LDA:
         cdef list line_split, occurrences
         with open(file_path) as file:
             # Randomly initialize assignments and record assignments
-            for doc, line in enumerate(file):
-                line_split = line.strip().split(",")
+            for line in enumerate(file):
+                line_split = re.findall(r"\d+", line)
                 iterline = map(int, iter(line_split[1:]))
-                occurrences = [(i, next(iterline)) for i in iterline]
+                # Not the most efficient because we already have iterator
+                # but much more readable
+                occurrences = [(self.token_permutation[i], next(iterline))
+                               for i in iterline]
                 for token, count in occurrences:
                     random_assignment = (
                         self.num_topics * np_rng.random(count)
@@ -243,6 +259,8 @@ cdef class LDA:
         """
         Posterior distribution over tokens for each topic such that
         output[i, j] = Pr[token j | topic i]
+        Be careful! If constructed with shuffle, output is also shuffled.
+        Use {self.get_inverse_permutation} to recover original token_id.
         """
         output = np.asarray(self.n_token)[:(self.current_tokens[1]
                                             - self.current_tokens[0])]
@@ -346,6 +364,8 @@ cdef class LDA:
         Returns the most common tokens of each topic along with their counts.
         {global_top[i, j, 1]} is the {j}th most common token in topic {i}
         and {global_top[i, j, 0]} is the corresponding count.
+        Be careful! If constructed with shuffle, output is also shuffled.
+        Use {self.get_inverse_permutation} to recover original token_id.
         """
         if num_top_tokens * self.mpi_size > self.size_vocab:
             raise ValueError("Too many words; try get_topic_distributions")
@@ -377,6 +397,11 @@ cdef class LDA:
         mpi.MPI_Type_free(&sort_index_type)
         mpi.MPI_Op_free(&Partial_merge_loc)
         return np.asarray(global_top)
+
+    def get_inverse_permutation(self):
+        inverse = np.empty_like(self.token_permutation)
+        inverse[self.token_permutation] = np.arange(self.size_vocab)
+        return inverse
 
     def __dealloc__(self):
         del self.assignment_ptr
