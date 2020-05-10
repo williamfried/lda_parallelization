@@ -87,11 +87,13 @@ cdef class LDA:
         )
 
         if not shuffle_words:
-            self.token_permutation = np.arange(self.size_vocab)
+            self.token_permutation = np.arange(self.size_vocab, dtype=np.intc)
         else:
             # Unlike below, we want same randomness for each node
             np.random.seed(seed)
-            self.token_permutation = np.random.permutation(self.size_vocab)
+            self.token_permutation = np.random.permutation(
+                self.size_vocab
+            ).astype(np.intc)
 
         # Set random seed
         seed_sequence = SeedSequence(seed).spawn(self.mpi_size)[self.mpi_rank]
@@ -351,7 +353,8 @@ cdef class LDA:
             )
             # I don't understand why this is so unsymmetric
             topic_coherence -= np.sum(
-                np.log(local_occur) * np.arange(num_top_tokens - 1, -1, -1),
+                np.log(np.add(local_occur, 1))
+                * np.arange(num_top_tokens - 1, -1, -1),
                 axis=1
             )
             # Perhaps it should be this instead
