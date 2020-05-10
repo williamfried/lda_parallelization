@@ -1,6 +1,4 @@
 import multiprocessing as mp
-import sys
-import time
 import nltk
 from nltk.corpus import stopwords
 import os
@@ -19,10 +17,11 @@ stop_words |= domain_specific_stop_words
 
 output_file = 'all_patent_docs.txt'
 
+
 def extract_words(filename, q):
-    '''Extract valid words from each patent document. The actual words of the patent are positioned in the second column of the text file.
-    Valid words are those that are not stopwords, don't contain any numeric digits are at least four characters long. The words are
-    added to a string, which is then pushed onto the queue.'''
+    '''Extract valid words from each patent document. The actual words of the patent are positioned in the second
+    column of the text file. Valid words are those that are not stopwords, don't contain any numeric digits are at
+     least four characters long. The words are added to a string, which is then pushed onto the queue.'''
     s = ''
     with open(filename, 'r') as f:
         for line in f:
@@ -30,16 +29,16 @@ def extract_words(filename, q):
             split_line = line.split('\t')
             if len(split_line) > 1:
                 word = split_line[1]
-                word = re.sub("[(),\[\]{}!.?@+_:;'$`&]", '', word.lower()).replace('-','')
+                word = re.sub("[(),\[\]{}!.?@+_:;'$`&]", '', word.lower()).replace('-', '')
                 if not (word in stop_words or len(word) < 4 or any(char.isdigit() for char in word)):
                     s += word + ' '
 
     s = s.rstrip()
     q.put(s)
 
+
 def listener(q):
     '''Listens for messages on the queue and writes a new line to the output file for each patent document.'''
-
     with open(output_file, 'w') as f:
         while True:
             m = q.get()
@@ -62,13 +61,14 @@ watcher = pool.apply_async(listener, (q,))
 patent_filenames = []
 for directory in os.listdir():
     if directory.startswith('patents'):
-        patent_filenames.extend([(directory + '/' + filename, q) for filename in os.listdir(directory) if filename.endswith('.nlp')])
+        patent_filenames.extend([(directory + '/' + filename, q) for filename in os.listdir(directory)
+                                 if filename.endswith('.nlp')])
 
 # assign filenames in parallel to each of the worker processes
 pool.starmap(extract_words, patent_filenames)
 
 
-# terminate listener 
+# terminate listener
 q.put('kill')
 pool.close()
 pool.join()
