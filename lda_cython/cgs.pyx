@@ -126,7 +126,7 @@ cdef class LDA:
         cdef list line_split, occurrences
         with open(file_path) as file:
             # Randomly initialize assignments and record assignments
-            for line in enumerate(file):
+            for doc, line in enumerate(file):
                 line_split = re.findall(r"\d+", line)
                 iterline = map(int, iter(line_split[1:]))
                 # Not the most efficient because we already have iterator
