@@ -383,6 +383,7 @@ cdef class LDA:
         n_token_arr = np.asarray(self.n_token[:(self.current_tokens[1]
                                                 - self.current_tokens[0])],
                                  dtype=np.intc)
+        # Replace with argpartition and a second sort
         local_top_id = np.argsort(-n_token_arr, axis=0)[:num_top_tokens]
         local_top_val = n_token_arr[local_top_id,
                                     np.arange(n_token_arr.shape[1])]
