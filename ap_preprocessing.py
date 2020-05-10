@@ -15,7 +15,8 @@ finally:
 domain_specific_stop_words = {'said'}
 stop_words |= domain_specific_stop_words
 
-
+# because there are only a couple thousand Associated Press articles, there's no need to process the documents
+# in parallel. Here, we use Spark to perform the preprocessing simply for practice.
 conf = SparkConf().setMaster('local[1]').setAppName('logs')
 sc = SparkContext(conf=conf)
 

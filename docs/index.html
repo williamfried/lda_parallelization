@@ -144,10 +144,10 @@
               
 
           <p class="section_paragraph">
-              The serial version of CGS, where one process is assigned all of the documents, follows naturally from the general procedure described above. First, the three counts described above are initialized to zero. The next step involves iterating over each document in the corpus and over every word in each document and randomly assigns each word to one of the T topics specified by the caller. After word w is assigned to topic t in document d, the three corresponding counts are incremented by one; namely, the number of words in document d that are assigned to topic t, the number of times that word w is assigned to topic t across all documents, and the number of words assigned to topic t across all documents. Overall, the time complexity of this initialization step is O(d\*w) where d represents the number of documents in the corpus, and w represents the average number of words per document. </p>
+              The serial version of CGS, where one process is assigned all of the documents, follows naturally from the general procedure described above. First, the three counts described above are initialized to zero. The next step involves iterating over each document in the corpus and over every word in each document and randomly assigns each word to one of the T topics specified by the caller. After word w is assigned to topic t in document d, the three corresponding counts are incremented by one; namely, the number of words in document d that are assigned to topic t, the number of times that word w is assigned to topic t across all documents, and the number of words assigned to topic t across all documents. Overall, the time complexity of this initialization step is O(d*w) where d represents the number of documents in the corpus, and w represents the average number of words per document. </p>
               
             <p class="section_paragraph">
-              At this point, we're ready to begin performing CGS. Just as with the initialization step, this involves iterating over each word in each document. The process of reassigning word w in document d that was previously assigned to topic t_old consists of three parts. First, word w is unassigned from topic t_old, which is represented by decrementing the three relevant counts. Next, the unnormalized weight is determined for each of the T topics by calculating the expression defined above, and a random topic, t_new, is sampled from the resulting categorical distribution. Finally, word w is assigned to topic t_new, which is represented by incrementing the three relevant counts. After each iteration, the topic coherence metric described above is calculated and compared to the value of the previous iteration. Just as with the initialization step, because each iteration involves looping through each word in the corpus, the time complexity of each iteration is O(d\*w).
+              At this point, we're ready to begin performing CGS. Just as with the initialization step, this involves iterating over each word in each document. The process of reassigning word w in document d that was previously assigned to topic t_old consists of three parts. First, word w is unassigned from topic t_old, which is represented by decrementing the three relevant counts. Next, the unnormalized weight is determined for each of the T topics by calculating the expression defined above, and a random topic, t_new, is sampled from the resulting categorical distribution. Finally, word w is assigned to topic t_new, which is represented by incrementing the three relevant counts. After each iteration, the topic coherence metric described above is calculated and compared to the value of the previous iteration. Just as with the initialization step, because each iteration involves looping through each word in the corpus, the time complexity of each iteration is O(d*w).
           </p>
             
           <p class="section_paragraph">
@@ -175,7 +175,7 @@
               
 
           <p class="section_paragraph">
-              While the serial version of CGS described above is straightforward to implement, it scales linearly with the number of documents in the corpus. This means that performing LDA on a relatively large number of documents is very computationally expensive. To get a sense of this computational cost, we implemented this serial version of LDA in Python and applied it to a toy dataset of approximately 2,250 Associated Press articles (these articles can be found here: http://www.cs.columbia.edu/~blei/lda-c/). The algorithm converged after 10 iterations and took 380 seconds to run. Assuming it would take the same number of iterations to converge, this level of performance means that it would take many hours to run LDA on a more realistic corpus that contains tens of thousands, hundreds of thousands or even millions of documents.</p>
+              While the serial version of CGS described above is straightforward to implement, it scales linearly with the number of documents in the corpus. This means that performing LDA on a relatively large number of documents is very computationally expensive. To get a sense of this computational cost, we implemented this serial version of LDA in Python and applied it to a toy dataset of approximately 2,250 Associated Press articles (these articles can be found here: http://www.cs.columbia.edu/~blei/lda-c/). The algorithm converged after 8 iterations and took 324 seconds to run. Assuming it would take the same number of iterations to converge, this level of performance means that it would take many hours to run LDA on a more realistic corpus that contains tens of thousands, hundreds of thousands or even millions of documents.</p>
               
             <p class="section_paragraph">
               Therefore, we sought to parallelize this algorithm by applying the big compute tools of MPI and OpenMP. We wrote our implementation in Cython because Python's GIL prevents multithreading, which is needed to run OpenMP. An added benefit of using Cython over Python is that Cython is compiled down to C rather than interpreted, which gave us an automatic boost in performance.</p>
@@ -236,12 +236,12 @@
             <img class="diagram" src="images/parallelization_design_diagram.png">
             
              <p class="section_paragraph">
-            The next paragraphs will further elaborate on the detailed implementation of the Spark preprossing, MPI and OpenMP. </p>
+            The next paragraphs will further elaborate on the detailed implementation of the Spark preprocessing, MPI and OpenMP. </p>
             
             <h3>Preprocessing</h3>
             
           <p class="section_paragraph">
-            As outlined above the The first step of the implementation was to download the patents documents, preprocess them and convert them to a format that could easily be ingested by the parallelized CGS algorithm. Each patent document came in the following format: </p>
+            As outlined above, the first step of the implementation was to download the patents documents, preprocess them and convert them to a format that could easily be ingested by the parallelized CGS algorithm. Each patent document came in the following format: </p>
             
             <p class="section_paragraph">             
               As shown above, the actual words of the patent are listed in the second column, while the rest of the columns contain additional information that may be useful to other natural language processing tasks. (Most of these patent documents were written before the advent of modern computers, so the majority of them are transcribed using optical character recognition software. As a result, some of the words were transcribed incorrectly (e.g. a double-u would be transcribed as two vees)). Thus, the first step was to extract these words from the patent documents. Our goal was to write the sequence of words in each patent document as a separate line in a text file, as this format would allow us to easily create an RDD using SparkContext’s textFile method. We used Python's multiprocessing module to speed up this process. 
@@ -279,7 +279,7 @@
           
           <h3>Parallel CGS Implementation</h3>
           <p class="section_paragraph">
-          We implemented the parallel approach outlined above using a combination of MPI and OpenMP. As explained in the section on the serial implementation, the vanilla CGS algorithm has a time complexity of O(d\*w) because it involves iterating over every document in the corpus and every word in each document. The purpose of using MPI was to parallelize the processing of the documents, while the purpose of using OpenMP was to parallelize the processing of the words. Because each of these tools was used to parallelize a different part of the CGS algorithm, they are orthogonal to one another and can be discussed separately. </p>
+          We implemented the parallel approach outlined above using a combination of MPI and OpenMP. As explained in the section on the serial implementation, the vanilla CGS algorithm has a time complexity of O(d*w) because it involves iterating over every document in the corpus and every word in each document. The purpose of using MPI was to parallelize the processing of the documents, while the purpose of using OpenMP was to parallelize the processing of the words. Because each of these tools was used to parallelize a different part of the CGS algorithm, they are orthogonal to one another and can be discussed separately. </p>
           
           <h4>MPI</h4>
           
@@ -344,7 +344,9 @@
         <div class="col-lg-12">
           <h2>Citations</h2>
           <p class="section_paragraph">
-            To be filled            
+            https://www.pnas.org/content/101/suppl_1/5228
+            https://dirichlet.net/pdf/mimno11optimizing.pdf
+            http://www.cs.utexas.edu/~inderjit/public_papers/nomad_lda_www15.pdf?fbclid=IwAR1Uq-8EsXy6DBDxNSCSSbLW-vY4TefM9xglr4MCr-AKtKty_Xgk-u7vKfU
             </p>
         </div>
       </div>
