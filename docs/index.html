@@ -74,13 +74,14 @@
           <!-- #########################################################  SUBSECTION ############################################################################-->
           <h3>Introduction</h3>
           <p class="section_paragraph">
-              Latent Dirichlet Allocation (LDA) is a popular unsupervised, Bayesian hierarchical model commonly applied to topic modelling. Given a list of documents, a prespecified number of topics, and several hyperparameters, LDA assigns each word in the corpus to a particular topic. Based on these assignments, LDA learns two main features of the corpus:
+              Latent Dirichlet Allocation (LDA) is a popular unsupervised, Bayesian hierarchical model commonly applied to topic modelling. Given a list of documents, a prespecified number of topics, and several hyperparameters, LDA assigns each word in the corpus to a particular topic. Based on these assignments, LDA learns two main features of the corpus:</P>
 
-            <ul>
+            <ul class="list_paragraph">
                 <li>It identifies each topic by ranking the importance of each word in the vocabulary to the given topic;</li>
                 <li>It weighs the contribution of each topic to the content of each document.</li>
             </ul>
 
+            <p class="section_paragraph">
             The figure below illustrates how LDA results in a topic distribution for each document. To the right, we show a list of 20 words that we have found associated with a selected topic in the distribution. Clearly, the results make sense, as all words displayed are thematically related––in this case, the stock market.  Because LDA is so widely used and well documented, we omit the details of the generative model. </p>
 
           <img class="diagram_large" src="images/lda_diagram.png">
@@ -256,7 +257,7 @@
                 </li>
             </ul>
 
-            The serial implementation of this preprocessing for the considered dataset was estimated to take multiple hours. As such, it made sense to develop a parallel version using Apache Spark and run it on an EMR cluster on AWS. First, the large text file was uploaded to an S3 bucket, after which they were added to the Hadoop file system within the cluster. The I/O-commands and RDD operations needed for the preprocessing could then easily be implemented using PySpark.
+            <p class="section_paragraph">The serial implementation of this preprocessing for the considered dataset was estimated to take multiple hours. As such, it made sense to develop a parallel version using Apache Spark and run it on an EMR cluster on AWS. First, the large text file was uploaded to an S3 bucket, after which they were added to the Hadoop file system within the cluster. The I/O-commands and RDD operations needed for the preprocessing could then easily be implemented using PySpark.
 
             For the cluster, we chose m4.xlarge EC2 instances for both the master node as the worker nodes.  Each of these have 4 vCPUs, which enables us to parallelize both on the node as on the core level. Different experiments have been run, using multiple nodes and cores, in order to evaluate the achieved speed-up. The following table and plot summarize the results:</p>
 

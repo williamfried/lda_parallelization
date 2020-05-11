@@ -9,6 +9,7 @@ body {
    font-weight: 200;
 }
 
+
 h2 {
   font-size: 40px;
   padding-top: 10px;
@@ -98,9 +99,6 @@ section {
   font-size: 15px;
 }
 
-.subsection_paragraph {
-  font-size: 10px;
-}
 
 .diagram_large {
   margin-top: 20px;
