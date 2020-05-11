@@ -91,7 +91,7 @@
           <p class="section_paragraph">
               There are several procedures used to infer the distribution of words per topic and the distribution of topics per document. The two most common approaches are 1) variational Bayesian inference and 2) collapsed Gibbs sampling. For this project, we focused on parallelizing the collapsed Gibbs sampling algorithm (CGS). CGS works as follows: first, every word in each of the documents is randomly assigned to one of the T topics. After this initialization step, the first iteration of CGS is performed where each word in the corpus is reassigned to a new topic. For an arbitrary word <mark>w</mark> in document <mark>d</mark>, this is achieved by sampling from a categorical distribution, where the unnormalized weight associated with each topic <mark>t</mark> is: </p>
 
-          <img class="diagram_medium" src="images/Equation1.png" width="130" height="80">
+           <img class="diagram_medium" src="images/Equation3.png" width="300" height="100">
               
           <p class="section_paragraph">
               where <mark>n_doc</mark> represents the number of words in document <mark>d</mark> assigned to topic <mark>t</mark>, <mark>n_word</mark> represents the number of times word w is assigned to topic t across all documents, <mark>n_all</mark> represents the number of words in the corpus that are assigned to topic <mark>t</mark>, <mark>α</mark> and <mark>beta</mark> are the LDA hyperparameters, and <mark>V</mark> is the vocabulary size. </p>
@@ -104,12 +104,12 @@
 
               <p class="section_paragraph"> The posterior distribution of words for each topic <mark>t</mark> is a V-dimensional Dirichlet distribution with the following parameter for each word <mark>w</mark> in the vocabulary:</p>
               
-              <img class="diagram_medium" src="images/Equation2.png" width="150" height="80">
+            <img class="diagram_medium" src="images/Equation1.png" width="130" height="80">
 
             <p class="section_paragraph">
               The posterior distribution of topics for each document <mark>d</mark> is T-dimensional Dirichlet distribution with the following parameter for each topic <mark></mark>: </p>
           
-          <img class="diagram_medium" src="images/Equation3.png" width="300" height="100">
+          <img class="diagram_medium" src="images/Equation2.png" width="150" height="80">
               
               <p class="section_paragraph">
               where <mark>t_doc</mark> represents the total number of topics assigned in document <mark>d</mark>. 
@@ -329,62 +329,49 @@
                 <li>OpenMP 4.5</li>
             </ul> 
             
-            For MPI, it is crucial for the cluster set-up to allow the different instances to send and receive information between one another.  This can be established with an interconnected virtual private network, which can easily be configured on AWS. After launching all the instances, we create a remote secure interconnection by generating SSH keys and making sure that these are listed under the authorized keys of the worker instances and the master node. Lastly, a shared data storage system is established by configuring an NFS-server and mounting one shared directory to all nodes. 
-
-When the cluster is set-up correctly, the parallel implementation of the CGS can be run. The overall procedure to do so is summarized in the README-file on Github here (https://github.com/LDA-Parallelization-CS205/lda_parallelization). 
-
-
-Performance:
-The CGS algorithm was run on the Google PATENT dataset using a cluster of AWS EC2 c4.xlarge instances, as described above. The code and instructions in a README can be found <a href=”https://github.com/LDA-Parallelization-CS205/lda_parallelization/tree/master/lda_cython”> here </a>. See <a href=”https://github.com/LDA-Parallelization-CS205/lda_parallelization/blob/master/lda_cython/cgs.pyx”>cgs.pyx</a> for implementation and <a href=”https://github.com/LDA-Parallelization-CS205/lda_parallelization/blob/master/lda_cython/main.py”>main.py</a> for usage. Below is a table of the running time; note we chose to use 16 topics and that the experiments run on one MPI node were done in a c4.2xlarge (which was scaled down to have the same 4 vCPU count using 2 cores and 2 threads per core and running the same operating system and software libraries) because of the larger 15 GB memory.
-
-
-
-Caption: Speedup when using 4 OMP threads, 360,846 documents, and 16 topics.
-
-As shown above, the speedup scales almost linearly with the number of MPI nodes. This makes sense because the ratio of communication to computation is so low. As explained in the implementation section, the only time that the nodes communicate with each other is at the end of each mini-iteration where they exchange tuples and topic-assignment counts; the rest of the time is spent reassigning each of the tuples in the queue. Overall, this means that the speedup increases as the number of documents in the corpus increases, as the communication overhead becomes more and more insignificant relative to the computation as the workload assigned of each node increases. 
-
-Caption: Speedup when using 8 MPI nodes, 360846 documents, and 16 topics.
-
-The speedup for various number of OMP threads is far from linear and even temporarily decreases when two OMP threads are used. When four threads are used, the speedup only increases to around 1.35. There are several explanations for this lackluster performance. First, it’s possible that the overhead associated with dynamically scheduling the hundreds of thousands of words in each batch is much more significant than we initially thought. However, a higher than expected assignment overhead probably doesn’t account for most of this lack of speedup. A more likely reason for the inefficiency is that, as we explained in the implementation section, we needed to use locks to ensure that only one node has access to the document-specific and topic-specific counts. Because there are so many documents in the corpus, the probability of a collision in the same document is quite small; however, because we chose to only use 16 topics, the probability of a collision in the same topic is much higher and likely occurs many times during each batch. The fact that there are two sets of locks per tuple assignment only compounds this probability of a collision. Therefore, it’s likely that the threads spend a sizable portion of the time waiting to acquire the lock on these assignment counts. 
-
-
-Caption: Scaled speedup when using 4 OMP threads per node and 16 topics.
-
-Scaled speedup has a slope that is significantly less than 1. While communication is relatively infrequent, this can partially be explained by the reduction operations that occur at the end of each iteration, which certainly cannot be completely parallelized.
-
-
-
-Caption: Average topic coherence on the chosen 360846 document subset of the Google PATENT dataset (run with 8 MPI nodes, 4 OMP threads per node)
-
-We also evaluated the average topic coherence to ensure that the modified CGS still converges. Note it seems to reach a relatively stable set of assignments in about 50 iterations. However, the actual topic results poorly represent topics as humans would describe them. This is likely due to two reasons: we chose very few topics for the sake of investigating computation time of the algorithm, and the OCR frequently failed, which corrupted the dataset. Below are two examples of the 50 most common words of two topics.
-
-
-
-Discussion: 
-
-Overall, we achieved most of our goals in this project.  First, we were able to successfully implement a serial version of CGS. Then, we were able to substantially speed up the preprocessing of the patent documents by using Spark. In terms of the parallelized version of CGS, the MPI implementation performed as well as we could have possibly expected, as it resulted in a nearly linear speedup. The only part that underperformed was our OpenMP implementation, as it didn’t produce much of a speedup over the version that only used MPI. As we’ve explained, this is most likely due to the locks on the document and topic-assignment counts that frequently force the threads to wait for the locks to be freed. 
-
-There are several ways that we could address this locking issue. First, we could simply increase the number of topics that we want to infer from the corpus, as this would reduce the probability of two threads trying to modify the counts at the same time. A second, complementary approach would be to avoid locks altogether and instead have each node keep track of its own document and topic-assignment count. After each batch is over, these local net change counts could then be summed together using an OpenMP reduction clause to calculate the overall change in the document and topic-assignment counts. This approach is analogous to the one we used to update the topic-assignment counts among all the nodes after each batch. While this strategy would likely produce a higher speedup as it eliminates any locking issues, the downside is that each thread in a node wouldn’t have access to the precise document and topic-assignment counts. However, the discrepancy between each thread’s local counts and the true global counts should be relatively small, such that the distortion to the categorical distribution is kept to a minimum. Ultimately, testing would need to be done to verify if this is a superior strategy. 
-
-One major lesson we learned from this project is to keep the MPI approach as simple as possible and keep the nodes as synchronized as possible. As described in the implementation section, we initially tried to send batches of processed tuples to the next node in the middle of each mini-iteration. After each word was processed by a node, this involved checking if the number of processed tuples exceeded a predefined threshold (we used 25% of the length of the original queue). If this condition was satisfied, these processed tuples were sent to the node to the right as an array. On the flip side, before each word was processed by a node, this involved checking if the node to the left had sent a message. If this condition was met, the message was received and the resulting array was appended to the node's queue. When we tested this complicated implementation, it initially worked fine for the first five or so iterations -- each node was processing its queue at roughly the same pace and all the tuples were transferred successfully between nodes. 
-
-However, the algorithm slowly began to break down after this point, as minor discrepancies in the rate at which each node processed its tuples became more and more pronounced. Eventually this created an imbalance where one of the queues contained significantly more tuples than it was supposed to have, and the rest of the nodes had much shorter queues to process. This imbalance and inefficiency grew larger and larger as the rest of the nodes quickly processed their tuples and became idle, while the overwhelmed node had a harder and harder time keeping up. We then tried to prevent this imbalance from taking place by instructing any node whose queue was abnormally long to send the surplus tuples to the node to the right. However, this haphazard solution didn't end up helping. There were also other issues with this implementation that are too subtle to describe but were just as frustrating and difficult to resolve. 
-
-Eventually, we realized that there must be a better way to transfer tuples between the nodes. After taking a step back, it didn't take us long to come up with the simple strategy that we ended up using. In retrospect, we realized that MPI programs are supposed to be straightforward to the point where the programmer knows exactly what each node is doing at any given time and there is no complicated control flow logic involving MPI-related tasks. Otherwise, the programmer is likely to experience a cascade of issues that are very difficult to debug and are unpredictable because of the stochastic nature of synchronization problems. 
-
-In terms of future work, there are a couple of paths to explore. First, we realize that the code, despite being heavily parallelized already, can still be optimized. For instance, the initialization for the CGS and the computation of the topic coherence still heavily rely on Python. This code could be further optimized by writing it in Cython. Next, the dataset did not seem to be ideal in the end. Although we expected to find a reasonable and relevant topic distribution for the large patent corpus, it appeared that the data had significant flaws. The patents were actually scanned and converted to text using Optical Character Recognition (OCR), which, especially for the older patents, led to meaningless words. As this clearly reduces our ability to intuitively interpret the resulting topics, another dataset might be worth exploring. Lastly, the concept of LDA has recently reached other domains than Natural Language Processing as well. For instance in computer vision, LDA can serve as a natural way for <a href=”http://groups.csail.mit.edu/vision/app/pubs/wangEnips07.pdf”>unsupervised image object classification</a> [6]. As these applications can be very computationally expensive as well, it could be worthwhile to expand our parallelization efforts to other domains. 
-
-
-References
-
-[1] D. M. Blei, A. Ng, and M. Jordan. “Latent Dirichlet allocation”. Journal of Machine Learning Research, 3:993–1022, Jan. 2003.
-[2] D. Minmo, H. M. Wallach, E. Talley, M. Leenders, and A. McCallum, “Optimizing Semantic Coherence in Topic Models,” in Proceedings of the Conference on Empirical Methods in Natural Language Processing, 2011
-[3] H.-F. Yu, C.-J. Hsieh, H. Yun, S. V. N. Vishwanathan, and I. S. Dhillon, “A Scalable Asynchronous Distributed Algorithm for Topic Modeling,” in Proceedings of the 24th International Conference on World Wide Web - WWW ’15, 2015, doi: 10.1145/2736277.2741682.
-[4] D. M. Blei, Latent Dirichlet Allocation in C. [Online]. Available: http://www.cs.columbia.edu/~blei/lda-c/.
-[5] C. Ré, and C. Zhang. DeepDive open datasets, 2015. [Online]. Available: http://deepdive.stanford.edu/opendata
-[6] X. Wang, and E. Grimson. "Spatial latent dirichlet allocation." Advances in neural information processing systems, 2008.
-
-
+            <p class="section_paragraph"> For MPI, it is crucial for the cluster set-up to allow the different instances to send and receive information between one another.  This can be established with an interconnected virtual private network, which can easily be configured on AWS. After launching all the instances, we create a remote secure interconnection by generating SSH keys and making sure that these are listed under the authorized keys of the worker instances and the master node. Lastly, a shared data storage system is established by configuring an NFS-server and mounting one shared directory to all nodes.When the cluster is set-up correctly, the parallel implementation of the CGS can be run. The overall procedure to do so is summarized in the README-file on Github <a href ="https://github.com/LDA-Parallelization-CS205/lda_parallelization"> here </a>.
+            
+            <h4>Performance</h4>
+            
+            <p class="section_paragraph"> The CGS algorithm was run on the Google PATENT dataset using a cluster of AWS EC2 c4.xlarge instances, as described above. The code and instructions in a README can be found <a href=”https://github.com/LDA-Parallelization-CS205/lda_parallelization/tree/master/lda_cython”> here </a>. See <a href=”https://github.com/LDA-Parallelization-CS205/lda_parallelization/blob/master/lda_cython/cgs.pyx”>cgs.pyx</a> for implementation and <a href=”https://github.com/LDA-Parallelization-CS205/lda_parallelization/blob/master/lda_cython/main.py”>main.py</a> for usage. Below is a table of the running time; note we chose to use 16 topics and that the experiments run on one MPI node were done in a c4.2xlarge (which was scaled down to have the same 4 vCPU count using 2 cores and 2 threads per core and running the same operating system and software libraries) because of the larger 15 GB memory.</p>
+            
+            <img class="diagram" src="images/TablePerformance.png" width="800" height="250">
+            <figure>
+              <img class="diagram_small" src="images/MPI_Speedup.png">
+              <figcaption>Speedup when using 4 OMP threads, 360,846 documents, and 16 topics.</figcaption>
+            </figure>
+            
+            <p class="section_paragraph">
+                As shown above, the speedup scales almost linearly with the number of MPI nodes. This makes sense because the ratio of communication to computation is so low. As explained in the implementation section, the only time that the nodes communicate with each other is at the end of each mini-iteration where they exchange tuples and topic-assignment counts; the rest of the time is spent reassigning each of the tuples in the queue. Overall, this means that the speedup increases as the number of documents in the corpus increases, as the communication overhead becomes more and more insignificant relative to the computation as the workload assigned of each node increases. </p>
+            
+            <figure>
+              <img class="diagram_small" src="images/OMP_Speedup.png">
+              <figcaption>Speedup when using 8 MPI nodes, 360846 documents, and 16 topics.</figcaption>
+            </figure>
+            
+            <p class="section_paragraph">
+                The speedup for various number of OMP threads is far from linear and even temporarily decreases when two OMP threads are used. When four threads are used, the speedup only increases to around 1.35. There are several explanations for this lackluster performance. First, it’s possible that the overhead associated with dynamically scheduling the hundreds of thousands of words in each batch is much more significant than we initially thought. However, a higher than expected assignment overhead probably doesn’t account for most of this lack of speedup. A more likely reason for the inefficiency is that, as we explained in the implementation section, we needed to use locks to ensure that only one node has access to the document-specific and topic-specific counts. Because there are so many documents in the corpus, the probability of a collision in the same document is quite small; however, because we chose to only use 16 topics, the probability of a collision in the same topic is much higher and likely occurs many times during each batch. The fact that there are two sets of locks per tuple assignment only compounds this probability of a collision. Therefore, it’s likely that the threads spend a sizable portion of the time waiting to acquire the lock on these assignment counts. </p>
+            
+            <figure>
+              <img class="diagram_small" src="images/Scaled_Speedup.png">
+              <figcaption>Speedup when using 8 MPI nodes, 360846 documents, and 16 topics.</figcaption>
+            </figure>
+            
+            <p class="section_paragraph">
+                Scaled speedup has a slope that is significantly less than 1. While communication is relatively infrequent, this can partially be explained by the reduction operations that occur at the end of each iteration, which certainly cannot be completely parallelized. </p>
+            
+            <figure>
+              <img class="diagram_small" src="images/Coherence_Patents.png" >
+              <figcaption>Caption:  Average topic coherence on the chosen 360846 document subset of the Google PATENT dataset (run with 8 MPI nodes, 4 OMP threads per node)
+            </figcaption>
+            </figure>
+            
+            <p class="section_paragraph">
+                We also evaluated the average topic coherence to ensure that the modified CGS still converges. Note it seems to reach a relatively stable set of assignments in about 50 iterations. However, the actual topic results poorly represent topics as humans would describe them. This is likely due to two reasons: we chose very few topics for the sake of investigating computation time of the algorithm, and the OCR frequently failed, which corrupted the dataset. Below are two examples of the 50 most common words of two topics. </p>
+            
+            <img class="diagram_small" src="images/TopicsPatents" >
+            
+            
             
             </div>
           </div>
@@ -398,26 +385,28 @@ References
           <h2>Discussion</h2>
 
           <p class="section_paragraph">
-              One major lesson we learned from this project is to keep the MPI approach as simple as possible and keep the nodes as synchronized as possible. As described in the implementation section, we initially tried to send sequences of processed tuples to the next node in the middle of each batch. After each word was processed by a node, this involved checking if the number of processed tuples exceeded a predefined threshold (we used 25% of the length of the original queue). If this condition was satisfied, these processed tuples were sent to the node to the right as an array. On the flip side, before each word was processed by a node, this involved checking if the node to the left had sent a message. If this condition was met, the message was received and the resulting array was appended to the node's queue. When we tested this complicated implementation, it initially worked fine for the first five or so iterations -- each node was processing its queue at roughly the same pace and all the tuples were transferred successfully between nodes. </p>
+              Overall, we achieved most of our goals in this project.  First, we were able to successfully implement a serial version of CGS. Then, we were able to substantially speed up the preprocessing of the patent documents by using Spark. In terms of the parallelized version of CGS, the MPI implementation performed as well as we could have possibly expected, as it resulted in a nearly linear speedup. The only part that underperformed was our OpenMP implementation, as it didn’t produce much of a speedup over the version that only used MPI. As we’ve explained, this is most likely due to the locks on the document and topic-assignment counts that frequently force the threads to wait for the locks to be freed.  </p>
 
           <p class="section_paragraph">
-              However, the algorithm slowly began to break down after this point, as minor discrepancies in the rate at which each node processed its tuples became more and more pronounced. Eventually this created an imbalance where one of the queues contained significantly more tuples than it was supposed to have, and the rest of the nodes had much shorter queues to process. This imbalance and inefficiency grew larger and larger as the rest of the nodes quickly processed their tuples and became idle, while the overwhelmed node had a harder and harder time keeping up. We then tried to prevent this imbalance from taking place by instructing any node whose queue was abnormally long to send the surplus tuples to the node to the right. However, this haphazard solution didn't end up helping. There were also other issues with this implementation that are too subtle to describe but were just as frustrating and difficult to resolve. </p>
+              There are several ways that we could address this locking issue. First, we could simply increase the number of topics that we want to infer from the corpus, as this would reduce the probability of two threads trying to modify the counts at the same time. A second, complementary approach would be to avoid locks altogether and instead have each node keep track of its own document and topic-assignment count. After each batch is over, these local net change counts could then be summed together using an OpenMP reduction clause to calculate the overall change in the document and topic-assignment counts. This approach is analogous to the one we used to update the topic-assignment counts among all the nodes after each batch. While this strategy would likely produce a higher speedup as it eliminates any locking issues, the downside is that each thread in a node wouldn’t have access to the precise document and topic-assignment counts. However, the discrepancy between each thread’s local counts and the true global counts should be relatively small, such that the distortion to the categorical distribution is kept to a minimum. Ultimately, testing would need to be done to verify if this is a superior strategy.  </p>
 
           <p class="section_paragraph">
-              Eventually, we realized that there must be a better way to transfer tuples between the nodes. After taking a step back, it didn't take us long to come up with the simple strategy that we ended up using. In retrospect, we realized that MPI programs are supposed to be straightforward to the point where the programmer knows exactly what each node is doing at any given time and there is no complicated control flow logic involving MPI-related tasks. Otherwise, the programmer is likely to experience a cascade of issues that are very difficult to debug and are unpredictable because of the stochastic nature of synchronization problems. </p>
+              One major lesson we learned from this project is to keep the MPI approach as simple as possible and keep the nodes as synchronized as possible. As described in the implementation section, we initially tried to send batches of processed tuples to the next node in the middle of each mini-iteration. After each word was processed by a node, this involved checking if the number of processed tuples exceeded a predefined threshold (we used 25% of the length of the original queue). If this condition was satisfied, these processed tuples were sent to the node to the right as an array. On the flip side, before each word was processed by a node, this involved checking if the node to the left had sent a message. If this condition was met, the message was received and the resulting array was appended to the node's queue. When we tested this complicated implementation, it initially worked fine for the first five or so iterations -- each node was processing its queue at roughly the same pace and all the tuples were transferred successfully between nodes.  </p>
+              
+            <p class="section_paragraph">
+                However, the algorithm slowly began to break down after this point, as minor discrepancies in the rate at which each node processed its tuples became more and more pronounced. Eventually this created an imbalance where one of the queues contained significantly more tuples than it was supposed to have, and the rest of the nodes had much shorter queues to process. This imbalance and inefficiency grew larger and larger as the rest of the nodes quickly processed their tuples and became idle, while the overwhelmed node had a harder and harder time keeping up. We then tried to prevent this imbalance from taking place by instructing any node whose queue was abnormally long to send the surplus tuples to the node to the right. However, this haphazard solution didn't end up helping. There were also other issues with this implementation that are too subtle to describe but were just as frustrating and difficult to resolve. </p>
+              
+              <p class="section_paragraph"> Eventually, we realized that there must be a better way to transfer tuples between the nodes. After taking a step back, it didn't take us long to come up with the simple strategy that we ended up using. In retrospect, we realized that MPI programs are supposed to be straightforward to the point where the programmer knows exactly what each node is doing at any given time and there is no complicated control flow logic involving MPI-related tasks. Otherwise, the programmer is likely to experience a cascade of issues that are very difficult to debug and are unpredictable because of the stochastic nature of synchronization problems. </p>
 
-          <p class="section_paragraph">In terms of future work, this is a pretty self-contained project so there are no natural follow-ups or extensions.</p>
+          <p class="section_paragraph">In terms of future work, there are a couple of paths to explore. First, we realize that the code, despite being heavily parallelized already, can still be optimized. For instance, the initialization for the CGS and the computation of the topic coherence still heavily rely on Python. This code could be further optimized by writing it in Cython. Next, the dataset did not seem to be ideal in the end. Although we expected to find a reasonable and relevant topic distribution for the large patent corpus, it appeared that the data had significant flaws. The patents were actually scanned and converted to text using Optical Character Recognition (OCR), which, especially for the older patents, led to meaningless words. As this clearly reduces our ability to intuitively interpret the resulting topics, another dataset might be worth exploring. Lastly, the concept of LDA has recently reached other domains than Natural Language Processing as well. For instance in computer vision, LDA can serve as a natural way for <a href=”http://groups.csail.mit.edu/vision/app/pubs/wangEnips07.pdf”>unsupervised image object classification</a> [6]. As these applications can be very computationally expensive as well, it could be worthwhile to expand our parallelization efforts to other domains. </p>
 
         </div>
       </div>
     </div>
   </section>
 
-<img class="diagram" src="images/TablePerformance.png" width="800" height="250">
-            <img class="diagram_small" src="images/MPI_Speedup.png">
-            <img class="diagram_small" src="images/OMP_Speedup.png">
-            <img class="diagram_small" src="images/Scaled_Speedup.png" >
-            <img class="diagram_small" src="images/Coherence_Patents.png" >
+
+
 
   <section id="citations">
     <div class="container">
@@ -425,10 +414,12 @@ References
         <div class="col-lg-12">
           <h2>Citations</h2>
           <p class="section_paragraph">
-            [1] https://www.pnas.org/content/101/suppl_1/5228
-            [2] https://dirichlet.net/pdf/mimno11optimizing.pdf
-            [3] http://www.cs.utexas.edu/~inderjit/public_papers/nomad_lda_www15.pdf?fbclid=IwAR1Uq-8EsXy6DBDxNSCSSbLW-vY4TefM9xglr4MCr-AKtKty_Xgk-u7vKfU
-            </p>
+            <p>[1] D. M. Blei, A. Ng, and M. Jordan. “Latent Dirichlet allocation”. <i>Journal of Machine Learning Research</i>, 3:993–1022, Jan. 2003.</p>
+            <p>[2] D. Minmo, H. M. Wallach, E. Talley, M. Leenders, and A. McCallum, “Optimizing Semantic Coherence in Topic Models,” in <i>Proceedings of the Conference on Empirical Methods in Natural Language Processing</i>, 2011</p>
+            <p>[3] H.-F. Yu, C.-J. Hsieh, H. Yun, S. V. N. Vishwanathan, and I. S. Dhillon, “A Scalable Asynchronous Distributed Algorithm for Topic Modeling,” in <i>Proceedings of the 24th International Conference on World Wide Web - WWW ’15</i>, 2015, doi: 10.1145/2736277.2741682.</p>
+            <p>[4] D. M. Blei, Latent Dirichlet Allocation in C. [Online]. Available: http://www.cs.columbia.edu/~blei/lda-c/.</p>
+            <p>[5] C. Ré, and C. Zhang. DeepDive open datasets, 2015. [Online]. Available: http://deepdive.stanford.edu/opendata</p>
+            <p>[6] X. Wang, and E. Grimson. "Spatial latent dirichlet allocation." <i>Advances in neural information processing systems</i>, 2008.</p>
         </div>
       </div>
     </div>
