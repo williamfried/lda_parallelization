@@ -96,7 +96,8 @@
           <p class="section_paragraph">
               There are several inference procedures to infer the distribution of words per topic and the distribution of topics per document. The two most common approaches are variational Bayesian inference and collapsed Gibbs sampling. For this project, we focused on parallelizing the collapsed Gibbs sampling algorithm (CGS). CGS works as follows: first, each word in each of the documents is randomly assigned to one of the T topics. After this initialization step, the first iteration of CGS is performed where each word in the corpus is reassigned to a new topic. For an arbitrary word w in document j, this is achieved by sampling from the a categorical distribution, where the unnormalized weight associated with each topic T is:</p>
 
-              FORMULA
+          <img class="diagram_medium" src="images/Equation1.png" width="130" height="80">
+              
           <p class="section_paragraph">
               where n_doc represents the number of words in document d assigned to topic T, n_word represents the number of times word w is assigned to topic T across all documents and n_all represents the number of words in the corpus that are assigned to topic T.
 
@@ -111,15 +112,19 @@
             <p class="section_paragraph">
               Finally, because there are multiple topics, this whole procedure is repeated for all T topics and the average of these topic coherences is taken to be the overall topic coherence measurement. The CGS algorithm has converged to the true posterior distribution when this topic coherence metric doesn't significantly change between consecutive iterations.
 
-              Once the CGS has converged, the final step is to calculate the distribution of words per topic and the distribution of topics per document. The posterior distribution of words for each topic t is a V-dimensional Dirichlet distribution with the following parameter for each word w in the vocabulary:
+              Once the CGS has converged, the final step is to calculate the distribution of words per topic and the distribution of topics per document. The posterior distribution of words for each topic t is a V-dimensional Dirichlet distribution with the following parameter for each word w in the vocabulary: </p>
+          
+          <img class="diagram_medium" src="images/Equation2.png" width="150" height="80">
 
+            <p class="section_paragraph">
+              The posterior distribution of topics for each document d is T-dimensional Dirichlet distribution with the following parameter for each topic t: </p>
+          
+          <img class="diagram_medium" src="images/Equation3.png" width="300" height="100">
 
-              The posterior distribution of topics for each document d is T-dimensional Dirichlet distribution with the following parameter for each topic t:
-
-
+            <p class="section_paragraph">
               where t_doc represents the total number of topics assigned in document d.
 
-              Based on the properties of the Dirichlet distribution, the probability of the c-th category is proportional to the c-th parameter. This means that the most common words associated with a topic and the most common topics associated with a document are those that have the highest corresponding Dirichlet parameters.
+              Based on the properties of the Dirichlet distribution, the probability of the c-th category is proportional to the c-th parameter. This means that the most common words associated with a topic and the most common topics associated with a document are those that have the highest corresponding Dirichlet parameters. </p>
 
           </p>
         </div>
@@ -299,6 +304,8 @@
 
           <p class="section_paragraph">
               The last major detail about the MPI implementation for each batch is that immediately before the call to MPI_Sendrecv, the MPI_Allreduce function is called with the MPI_SUM operation. This adds the net change topic-assignment counts of each node and sends the result back to each of the nodes so they all have an updated view of the global topic-assignment count. These batches are carried out until a full iteration (i.e. N batches, where N is the number of nodes) has been completed. At this point, the topic coherence needs to be calculated to check if the CGS algorithm has converged to the posterior distribution. Because computing the topic coherence requires the posterior distribution of words for each topic, the word-assignment counts from each node needs to be gathered. </p>
+            
+            
 
           <p class="section_paragraph">RESULTS!!</p>
 
