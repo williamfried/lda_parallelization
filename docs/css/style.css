@@ -9,6 +9,12 @@ body {
    font-weight: 200;
 }
 
+mark {
+  color: black;
+  font-size: 13px;
+  background: #e8e8e8;
+  font-family: monospace;
+}
 
 h2 {
   font-size: 40px;
