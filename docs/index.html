@@ -154,7 +154,7 @@
           </p>
 
             <img class="diagram_medium" src="images/SerialTopics.png" >
-            <img class="diagram_small" src="images/CoherencePlot.png" width="400" height="400" >
+            <img class="diagram_small" src="images/CoherencePlot.png" width="400" height="300" >
 
         <p class="section_paragraph">
               Clearly, the algorithm is able to group a set of words that make intuitive sense in the context of one particular topic. In this case, the topic on the left seems to be centered around the theme of the stock market, while the one on the right relates to South-African politics. The plot further shows how the CGS algortihm converges towards a constant value for the average topic coherence.
@@ -268,8 +268,8 @@
             For the cluster, we chose m4.xlarge EC2 instances for both the master node as the worker nodes.  Each of these have 4 vCPUs, which enables us to parallelize both on the node as on the core level. Different experiments have been run, using multiple nodes and cores, in order to evaluate the achieved speed-up. The following table and plot summarize the results:</p>
 
 
-            <img class="diagram_small" src="images/SparkTable.png" width="400" height="150">
-            <img class="diagram_small" src="images/SparkSpeedupplot.png" width="400" height="400">
+            <img class="diagram_small" src="images/SparkTable.png" >
+            <img class="diagram_small" src="images/SparkSpeedupplot.png" >
 
             <p class="section_paragraph">
             Clearly, the Spark implementation of the patent preprocessing performs well. For an increasing total number of cores used in the parallelization, the speed-up increases and gets reasonably close to the maximal theoretical speed-up. Note that the curve will plateau for increasing number of cores, as the additional overhead cost will become relatively larger compared to the computational gain of an additional core. Using 8 worker nodes and 2 cores per node, the algortihm was eventually able to achieve a speed-up of approximately 12, while the theoretical is 16. As such, the runtime has been reduced to a reasonable 29 mins. </p>
@@ -308,6 +308,12 @@
             
 
           <p class="section_paragraph">RESULTS!!</p>
+            
+            <img class="diagram" src="images/TablePerformance.png" width="800" height="250">
+            <img class="diagram_small" src="images/MPI_Speedup.png">
+            <img class="diagram_small" src="images/OMP_Speedup.png">
+            <img class="diagram_small" src="images/Scaled_Speedup.png" >
+            <img class="diagram_small" src="images/Coherence_Patents.png" >
 
           <h4>OpenMP</h4>
 
