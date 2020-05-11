@@ -12,7 +12,7 @@ body {
 mark {
   color: black;
   font-size: 13px;
-  background: #e8e8e8;
+  background: #f1f1f1;
   font-family: monospace;
 }
 
@@ -132,6 +132,13 @@ section {
   margin-top: 20px;
   margin-bottom: 20px;
 }
+
+figcaption {
+  margin-top: -16px;
+  font-size: 12px;
+  text-align: center;
+}
+
 
 
 /* SOME MEDIA QUERIES TO MAKE IT RESPONSIVE BABY */
